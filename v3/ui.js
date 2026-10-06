@@ -1,35 +1,41 @@
 'use strict';
-/* Feed the Sun v3 — interface, commandes, sons, sauvegarde et démarrage. */
+/* Feed the Sun v3 — interface principale : affichage, commandes, sons, événements, sauvegarde, installation, démarrage. */
 (function () {
-  const G = window.FTS3, Wd = G.W, R = G.R;
+  const G = window.FTS3, Wd = G.W, R = G.R, O = G.O, P = G.P;
   const $ = id => document.getElementById(id);
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-  let s = null, lang = 'fr', tab = 'gear';
+  let s = null, lang = 'fr', tab = 'gear', deferredInstall = null;
 
-  const T = (k, v) => { let str = (G.I18N[lang] && G.I18N[lang][k]) || G.I18N.fr[k] || k; if (v) for (const x in v) str = str.split('{' + x + '}').join(v[x]); return str; };
-  const N = o => o[lang] || o.fr;
-  const SUF = { fr: ['', 'k', 'M', 'Md', 'Bn'], en: ['', 'K', 'M', 'B', 'T'] };
+  /* ---------- Textes et nombres ---------- */
+  const T = (k, v) => { let str = G.I18N[lang][k]; if (str == null) str = G.I18N.fr[k]; if (str == null) str = k; if (v) for (const x in v) str = String(str).split('{' + x + '}').join(v[x]); return str; };
+  const SUF = { fr: ['', 'k', 'M', 'Md', 'Bn', 'Bd', 'Tn'], en: ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi'] };
   const loc = str => (lang === 'fr' ? str.replace('.', ',') : str);
-  function fmt(n) {
+  const fmt = n => {
+    n = Math.max(0, n);
     if (n < 1e4) return Math.floor(n).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US');
-    const e = Math.min(4, Math.floor(Math.log10(n) / 3)), v = n / Math.pow(1000, e);
+    const e = Math.min(6, Math.floor(Math.log10(n) / 3)), v = n / Math.pow(1000, e);
     return loc(v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)) + ' ' + SUF[lang][e];
-  }
+  };
   const fmtNum = v => loc(String(Math.round(v * 100) / 100));
-  function fmtTime(sec) { sec = Math.floor(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, x = sec % 60; return h ? h + ' ' + T('h') + ' ' + m + ' ' + T('min') : m ? m + ' ' + T('min') + ' ' + x + ' ' + T('s') : x + ' ' + T('s'); }
+  const fmtTime = sec => { sec = Math.floor(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, x = sec % 60; return h ? h + ' ' + T('h') + ' ' + m + ' ' + T('min') : m ? m + ' ' + T('min') + ' ' + x + ' ' + T('s') : x + ' ' + T('s'); };
+  const roman = n => ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n - 1] || String(n);
+  const A = id => (G.I18N[lang].ach[id] || G.I18N.fr.ach[id]);
 
   /* ---------- Sons synthétisés ---------- */
-  let ac = null, lastDump = 0;
+  let ac = null, lastSfx = {};
   function sfx(type) {
     if (!s || !s.settings.sound) return;
+    const now = performance.now(); if (now - (lastSfx[type] || 0) < 60) return; lastSfx[type] = now;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-      const P = { pickup: [600, 900, 0.07, 0.035, 'sine'], dump: [220, 160, 0.06, 0.04, 'triangle'], launch: [120, 520, 0.7, 0.06, 'sawtooth'],
-        buy: [520, 780, 0.09, 0.04, 'sine'], full: [440, 330, 0.18, 0.04, 'square'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.06, 'sine'] }[type];
+      const p = { pickup: [600, 900, 0.07, 0.03, 'sine'], dump: [220, 160, 0.06, 0.035, 'triangle'], launch: [120, 520, 0.7, 0.05, 'sawtooth'], buy: [520, 780, 0.09, 0.04, 'sine'],
+        full: [440, 330, 0.18, 0.035, 'square'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.06, 'sine'], gold: [880, 1320, 0.25, 0.05, 'sine'],
+        level: [440, 880, 0.5, 0.06, 'triangle'], learn: [660, 990, 0.3, 0.05, 'sine'], hire: [392, 523, 0.25, 0.05, 'triangle'], wreck: [990, 1480, 0.3, 0.05, 'sine'] }[type];
+      if (!p) return;
       const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
-      o.type = P[4]; o.frequency.setValueAtTime(P[0], t); o.frequency.exponentialRampToValueAtTime(P[1], t + P[2]);
-      g.gain.setValueAtTime(P[3], t); g.gain.exponentialRampToValueAtTime(0.0001, t + P[2]);
-      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + P[2] + 0.02);
+      o.type = p[4]; o.frequency.setValueAtTime(p[0], t); o.frequency.exponentialRampToValueAtTime(p[1], t + p[2]);
+      g.gain.setValueAtTime(p[3], t); g.gain.exponentialRampToValueAtTime(0.0001, t + p[2]);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + p[2] + 0.02);
     } catch (e) { /* audio indisponible */ }
   }
 
@@ -37,10 +43,8 @@
   function toast(title, text, kind) {
     const box = $('toasts');
     while (box.children.length >= 3) box.firstChild.remove();
-    const t = el('div', 'toast' + (kind ? ' toast-' + kind : ''));
-    t.append(el('div', 'toast-title', title), el('div', 'toast-text', text || ''));
-    box.append(t);
-    setTimeout(() => t.classList.add('out'), 3200); setTimeout(() => t.remove(), 3800);
+    const t = el('div', 'toast' + (kind ? ' toast-' + kind : '')); t.append(el('div', 'toast-title', title), el('div', 'toast-text', text || ''));
+    box.append(t); setTimeout(() => t.classList.add('out'), 3200); setTimeout(() => t.remove(), 3800);
   }
   function modal(title, lines, actions) {
     $('modalTitle').textContent = title;
@@ -50,200 +54,179 @@
     $('modal').hidden = false; const f = a.querySelector('button'); if (f) f.focus();
   }
 
-  /* ---------- Équipement ---------- */
-  const rows = {};
-  function buildGear() {
-    const box = $('tab-gear'); box.innerHTML = '';
-    G.UPGRADES.forEach(u => {
-      const r = el('div', 'gen-row up-row');
-      const main = el('div', 'gen-main');
-      const top = el('div', 'gen-top'); top.append(el('span', 'gen-name', N(u.name)), el('span', 'gen-count'));
-      main.append(top, el('div', 'gen-desc', N(u.desc)), el('div', 'gen-prod'));
-      const btn = el('button', 'buy-btn'); btn.type = 'button'; btn.append(el('span', 'buy-qty'), el('span', 'buy-cost'));
-      btn.onclick = () => { if (Wd.buy(s, u.id)) refreshGear(); };
-      r.append(main, btn); box.append(r); rows[u.id] = r;
-    });
-    refreshGear();
-  }
-  function refreshGear() {
-    let any = false;
-    G.UPGRADES.forEach(u => {
-      const r = rows[u.id]; if (!r) return;
-      const lvl = s.lvl[u.id], maxed = lvl >= u.max, cost = Wd.cost(s, u.id), can = Wd.canBuy(s, u.id);
-      any = any || can;
-      const v = u.eff(lvl), shown = Number.isInteger(v) ? String(v) : fmtNum(v);
-      r.querySelector('.gen-count').textContent = T('lvl', { n: lvl });
-      r.querySelector('.gen-prod').textContent = T('now', { v: N(u.unit).replace('{v}', shown) });
-      const b = r.querySelector('.buy-btn'); b.disabled = maxed; b.classList.toggle('can', can);
-      r.querySelector('.buy-qty').textContent = maxed ? '' : '+1';
-      r.querySelector('.buy-cost').textContent = maxed ? T('maxed') : fmt(cost) + ' $';
-    });
-    $('gearDot').hidden = !any;
-  }
+  /* ---------- Installation (application) ---------- */
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (tab === 'opt') P.render(true); });
+  const canInstall = () => !!deferredInstall;
+  const install = () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(() => { deferredInstall = null; P.render(true); }); };
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-  /* ---------- Équipe (aperçu de l'étape 2) ---------- */
-  function buildTeam() {
-    const box = $('tab-team'); box.innerHTML = '';
-    const sec = el('section', 'jump-box'); sec.append(el('h3', null, T('teamTitle')), el('p', 'muted', T('teamText')));
-    box.append(sec);
-    [['teamCard1', 'teamCard1d'], ['teamCard2', 'teamCard2d']].forEach(([a, b]) => {
-      const r = el('div', 'gen-row is-locked');
-      const m = el('div', 'gen-main'); const top = el('div', 'gen-top'); top.append(el('span', 'gen-name', T(a)), el('span', 'tag-soon', T('soon')));
-      m.append(top, el('div', 'gen-desc', T(b))); r.append(m); box.append(r);
-    });
-  }
+  G.U = { T, fmt, fmtNum, fmtTime, roman, A, sfx, toast, modal, state: () => s, tab: () => tab, lang: () => lang, setLang: k => setLang(k), canInstall, install, reset: () => { Wd.wipe(); s = Wd.fresh(); s.settings.lang = lang; Wd.reset(s); afterLoad(); } };
 
-  /* ---------- Options ---------- */
-  function buildOptions() {
-    const box = $('tab-opt'); box.innerHTML = '';
-    const sec = t => { const x = el('section', 'opt-section'); x.append(el('h3', null, t)); box.append(x); return x; };
-    const a = sec(T('lang')), seg = el('div', 'seg');
-    [['fr', 'Français'], ['en', 'English']].forEach(([k, label]) => { const b = el('button', 'seg-btn' + (lang === k ? ' is-on' : ''), label); b.type = 'button'; b.onclick = () => setLang(k); seg.append(b); });
-    a.append(seg);
-    const b = sec(T('sound')), snd = el('button', 'btn btn-ghost', s.settings.sound ? T('on') : T('off')); snd.type = 'button';
-    snd.onclick = () => { s.settings.sound = !s.settings.sound; buildOptions(); }; b.append(snd);
-    sec(T('controls')).append(el('p', 'muted', T('controlsText')));
-    const st = sec(T('stats')), dl = el('dl', 'stats'); dl.id = 'statsList'; st.append(dl);
-    const ln = sec(T('version')), row = el('div', 'btn-row');
-    [['oldVersion', 'https://klyde94.github.io/feed-the-sun/'], ['plan', 'https://klyde94.github.io/feed-the-sun/plan.html']].forEach(([k, href]) => { const x = el('a', 'btn btn-ghost', T(k)); x.href = href; x.target = '_blank'; x.rel = 'noopener'; row.append(x); });
-    ln.append(row);
-    const r = sec(T('resetTitle')), rb = el('button', 'btn btn-danger', T('resetBtn')); rb.type = 'button';
-    rb.onclick = () => modal(T('resetConfirm'), [T('resetText')], [{ label: T('resetGo'), cls: 'btn-danger', fn: () => { Wd.wipe(); s = Wd.fresh(); s.settings.lang = lang; s.tutorial = 0; Wd.reset(s); afterLoad(); } }, { label: T('cancel'), cls: 'btn-ghost' }]);
-    r.append(rb);
-    refreshStats();
-  }
-  function refreshStats() {
-    const dl = $('statsList'); if (!dl || tab !== 'opt') return;
-    dl.innerHTML = '';
-    [[T('stTime'), fmtTime(s.playTime)], [T('stSent'), fmt(s.sent)], [T('stMoney'), fmt(s.moneyLife) + ' $'], [T('stPlanets'), String(s.saved)]]
-      .forEach(([k, v]) => dl.append(el('dt', null, k), el('dd', null, v)));
-  }
-
+  /* ---------- Onglets, langue, vue ---------- */
   function showTab(name) {
     tab = name;
     document.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', on); });
-    ['gear', 'team', 'opt'].forEach(n => { $('tab-' + n).hidden = n !== name; });
-    if (name === 'opt') buildOptions();
+    ['gear', 'team', 'trees', 'galaxy', 'opt'].forEach(n => { $('tab-' + n).hidden = n !== name; });
+    P.render(true);
+    try { localStorage.setItem('feedthesun.v3.tab', name); } catch (e) { /* stockage indisponible */ }
   }
   function setLang(k) {
     lang = k; s.settings.lang = k; document.documentElement.lang = k;
     document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = T(e.dataset.i18n); });
-    $('launchSub').textContent = T('launchKey');
-    buildGear(); buildTeam(); showTab(tab);
+    showTab(tab);
+  }
+  function setView(v) {
+    if (v === 'orbit' && !s.ship) return;
+    s.view = v; Wd.input.x = Wd.input.y = 0;
+    if (v === 'orbit' && !s.seenOrbit) { s.seenOrbit = true; toast(T('orbit'), T('hintOrbit')); }
   }
 
-  /* ---------- Affichage principal ---------- */
+  /* ---------- Affichage ---------- */
   let lastStage = -1;
   function hud() {
+    const z = s.view, ground = z === 'ground';
     $('money').textContent = fmt(s.money);
     $('sent').textContent = fmt(s.sent);
+    $('lvlTxt').textContent = T('level', { n: s.level }); $('xpBar').style.width = Math.min(100, (s.xp / G.xpNeed(s.level)) * 100) + '%';
+    $('ptsTxt').textContent = (s.skillPts ? '✦ ' + s.skillPts + '  ' : '') + (s.techPts ? '★ ' + s.techPts : '');
     const info = Wd.planetInfo(s);
     $('planetName').textContent = s.awaitingTravel ? info.good : info.bad;
-    $('planetMeta').textContent = T('planetN', { n: s.planet + 1 });
+    $('planetMeta').textContent = T('planetN', { n: s.planet + 1 }) + ' · ' + T('galaxyN', { g: roman(s.jumps + 1) });
     const stage = Wd.sunStage(s), sd = G.SUN[stage];
-    $('sunMeta').textContent = N(sd.name) + ' · ' + sd.k.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') + ' K';
-    if (lastStage >= 0 && stage > lastStage) { toast(T('sunToast'), T('sunText', { name: N(sd.name), k: sd.k }), 'sun'); R.fxSunUp(); sfx('sun'); }
+    $('sunMeta').textContent = G.I18N[lang].sun[stage] + ' · ' + sd.k.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') + ' K';
+    if (lastStage >= 0 && stage > lastStage) { toast(T('sunToast'), G.I18N[lang].sun[stage], 'sun'); R.fxSunUp(); O.fxSunUp(); sfx('sun'); }
     lastStage = stage;
     document.documentElement.style.setProperty('--sun', 'rgb(' + R.sunColor().join(',') + ')');
-    const bc = Wd.bagCap(s), cc = Wd.contCap(s), poll = Wd.pollution(s) * 100;
-    $('bagTxt').textContent = s.bag.length + '/' + bc; $('bagBar').style.width = (s.bag.length / bc) * 100 + '%';
-    $('contTxt').textContent = s.cont.length + '/' + cc; $('contBar').style.width = (s.cont.length / cc) * 100 + '%';
+    const load = ground ? s.bag : s.hold, lcap = ground ? Wd.bagCap(s) : Wd.holdCap(s), cc = Wd.contCap(s, z), cont = s.cont[z].length, poll = Wd.pollution(s) * 100;
+    $('loadName').textContent = T(ground ? 'bag' : 'hold'); $('contName').textContent = T(ground ? 'container' : 'cannonBox');
+    $('bagTxt').textContent = load.length + '/' + lcap; $('bagBar').style.width = (load.length / lcap) * 100 + '%';
+    $('contTxt').textContent = cont + '/' + cc; $('contBar').style.width = (cont / cc) * 100 + '%';
     $('pollTxt').textContent = (poll > 0 && poll < 1 ? loc(poll.toFixed(1)) : Math.ceil(poll)) + ' %'; $('pollBar').style.width = poll + '%';
     const lb = $('launchBtn');
-    lb.disabled = !s.cont.length || Wd.launching > 0;
-    lb.classList.toggle('is-full', s.cont.length >= cc);
-    lb.querySelector('span').textContent = T('launch') + (s.cont.length ? ' · ' + fmt(Wd.contValue(s)) + ' $' : '');
+    lb.disabled = !cont || Wd.Z[z].launching > 0; lb.classList.toggle('is-full', cont >= cc);
+    lb.querySelector('span').textContent = T('launch') + (cont ? ' · ' + fmt(Wd.contValue(s, z)) + ' $' : '');
+    $('viewSeg').hidden = !s.ship;
+    $('viewGround').classList.toggle('is-on', ground); $('viewOrbit').classList.toggle('is-on', !ground);
+    $('boost').hidden = !(s.frenzy > 0); if (s.frenzy > 0) $('boost').textContent = '×2 · ' + Math.ceil(s.frenzy) + ' s';
     $('banner').hidden = !s.awaitingTravel;
     if (s.awaitingTravel) {
       const next = Wd.planetInfo(s, s.planet + 1);
-      $('bannerTitle').textContent = T('cleanTitle', { name: info.good });
-      $('bannerText').textContent = T('cleanText', { old: info.bad, next: next.bad });
-      $('travelBtn').textContent = T('travel', { next: next.bad });
+      $('bannerTitle').textContent = T('cleanTitle', { name: info.good }); $('bannerText').textContent = T('cleanText', { old: info.bad, next: next.bad }); $('travelBtn').textContent = T('travel', { next: next.bad });
     }
+    const d = P.dots(s); for (const k in d) { const e = $('dot-' + k); if (e) e.hidden = !d[k]; }
     hints();
   }
   function hints() {
     let key = null;
-    if (s.tutorial === 0) key = 'hint0';
+    if (R.wreck && !s.wrecks) key = 'hintWreck';
+    else if (s.tutorial === 0) key = 'hint0';
     else if (s.tutorial === 1 && s.bag.length >= Wd.bagCap(s)) key = 'hint1';
     else if (s.tutorial === 2) key = 'hint2';
     else if (s.tutorial === 3) key = 'hint3';
+    else if (s.tutorial === 4 && s.money >= Wd.hireCost(s, 'collector')) key = 'hint4';
     const h = $('hint'); h.hidden = !key;
     if (key && h.dataset.k !== key + lang) { h.textContent = T(key); h.dataset.k = key + lang; }
   }
 
-  /* ---------- Événements du monde ---------- */
-  Wd.on('pickup', it => { R.fxPickup(it); sfx('pickup'); if (s.tutorial === 0) s.tutorial = 1; });
-  Wd.on('bagFull', () => sfx('full'));
-  Wd.on('dump', k => { R.fxDump(k); const n = performance.now(); if (n - lastDump > 70) { sfx('dump'); lastDump = n; } if (s.tutorial === 1) s.tutorial = 2; });
-  Wd.on('contFull', () => toast(T('contFull'), '', 'sun'));
+  /* ---------- Événements du moteur ---------- */
+  Wd.on('pickup', e => { if (e.z === s.view) R.fxPickup(e); if (e.who === 'me') { sfx('pickup'); if (s.tutorial === 0) s.tutorial = 1; } });
+  Wd.on('full', () => sfx('full'));
+  Wd.on('dump', e => { if (e.z === 'ground') R.fxDump(e); if (e.who === 'me') { sfx('dump'); if (s.tutorial === 1) s.tutorial = 2; } });
+  Wd.on('contFull', z => { if (z === s.view && !(z === 'ground' ? s.team.operator : s.team.gunner)) toast(T('contFull'), '', 'sun'); });
   Wd.on('launch', e => {
-    R.fxLaunch(e); sfx('launch');
-    R.floater(T('launchToast', { m: fmt(e.money) }), G.BASE_X, G.GROUND_TOP - 12);
-    if (e.full) toast(T('launchToast', { m: fmt(e.money) }), T('fullBonus'), 'sun');
-    if (s.tutorial === 2) s.tutorial = 3;
+    const label = fmt(e.money);
+    if (e.z === s.view) { (e.z === 'ground' ? R : O).fxLaunch(Object.assign({ label }, e)); if (!e.auto || Math.random() < 0.3) sfx('launch'); }
+    if (e.full && !e.auto) toast('+' + label + ' $', T('fullBonus'), 'sun');
+    if (!e.auto && s.tutorial === 2) s.tutorial = 3;
   });
-  Wd.on('buy', () => { sfx('buy'); if (s.tutorial === 3) s.tutorial = 4; });
+  Wd.on('buy', () => { if (s.tutorial === 3) s.tutorial = 4; });
+  Wd.on('ship', () => { sfx('hire'); toast(T('buyShip'), T('hintOrbit'), 'sun'); });
+  Wd.on('hire', id => { sfx('hire'); toast(T('hireToast', { name: T('hire.' + id) }), T('hire.' + id + '.d')); if (s.tutorial === 4) s.tutorial = 5; });
+  Wd.on('gold', e => { sfx('gold'); if (e.who === 'me') { R.fxGold(); toast(T('goldToast'), T('goldText', { n: e.n }), 'sun'); } });
+  Wd.on('level', n => { sfx('level'); toast(T('levelUp', { n }), T('levelUpText'), 'ach'); });
+  Wd.on('crewLevel', e => { if (e.lvl % 5 === 0) toast(T('empLevel', { n: e.lvl }), ''); });
   Wd.on('cleaned', () => { R.fxClean(); sfx('clean'); });
   Wd.on('travel', () => R.fxTravel());
+  Wd.on('salvage', r => { sfx('wreck'); toast(r.type === 'cargo' ? T('cargo', { m: fmt(r.money) }) : r.type === 'frenzy' ? T('frenzy', { s: r.secs }) : T('goldRain'), '', 'sun'); });
+  Wd.on('jump', g => { R.fxJump(); sfx('clean'); toast(T('jumpToast', { g: roman(s.jumps + 1) }), T('jumpToastText', { n: g }), 'sun'); });
+  Wd.on('ach', id => { sfx('learn'); toast(T('achToast'), A(id)[0], 'ach'); });
 
   /* ---------- Commandes ---------- */
   const keys = new Set();
   const KEYMAP = { KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0], KeyW: [0, -1], ArrowUp: [0, -1], KeyS: [0, 1], ArrowDown: [0, 1] };
-  function syncKeys() { let x = 0, y = 0; keys.forEach(c => { x += KEYMAP[c][0]; y += KEYMAP[c][1]; }); Wd.input.x = Math.sign(x); Wd.input.y = Math.sign(y); }
-  function typing() { const t = document.activeElement && document.activeElement.tagName; return t === 'INPUT' || t === 'TEXTAREA'; }
+  const syncKeys = () => { let x = 0, y = 0; keys.forEach(c => { x += KEYMAP[c][0]; y += KEYMAP[c][1]; }); Wd.input.x = Math.sign(x); Wd.input.y = Math.sign(y); };
+  const typing = () => { const t = document.activeElement && document.activeElement.tagName; return t === 'INPUT' || t === 'TEXTAREA'; };
   function bindInputs() {
     document.addEventListener('keydown', e => {
-      if (typing()) return;
+      if (typing() || !$('modal').hidden && e.key !== 'Escape') return;
       if (KEYMAP[e.code]) { keys.add(e.code); syncKeys(); e.preventDefault(); }
-      else if (e.code === 'Enter' || e.code === 'NumpadEnter') { if (!e.repeat && document.activeElement.tagName !== 'BUTTON') { Wd.launch(s); e.preventDefault(); } }
+      else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat && document.activeElement.tagName !== 'BUTTON') { Wd.launch(s, s.view); e.preventDefault(); }
+      else if (e.code === 'Tab' && s.ship && document.activeElement === document.body) { setView(s.view === 'ground' ? 'orbit' : 'ground'); e.preventDefault(); }
       else if (e.key === 'Escape' && !$('modal').hidden) $('modal').hidden = true;
     });
     document.addEventListener('keyup', e => { if (keys.delete(e.code)) syncKeys(); });
     window.addEventListener('blur', () => { keys.clear(); syncKeys(); });
     const cv = $('scene'); let dragging = false;
     const aim = ev => {
-      const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
-      const it = R.itemAt(x, y);
-      if (it) Wd.goTo(it.x, it.y); else { const p = R.toWorld(x, y); Wd.goTo(p.x, p.y); }
+      const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, rd = s.view === 'ground' ? R : O;
+      const it = rd.itemAt(x, y);
+      if (it) Wd.goTo(s, it.x, it.y); else { const p = rd.toWorld(x, y); Wd.goTo(s, p.x, p.y); }
     };
-    cv.addEventListener('pointerdown', ev => { dragging = true; cv.setPointerCapture(ev.pointerId); aim(ev); });
+    cv.addEventListener('pointerdown', ev => {
+      const r = cv.getBoundingClientRect();
+      if (R.hitWreck(ev.clientX - r.left, ev.clientY - r.top, ev.pointerType !== 'mouse')) { Wd.salvage(s); return; }
+      dragging = true; cv.setPointerCapture(ev.pointerId); aim(ev);
+    });
     cv.addEventListener('pointermove', ev => { if (dragging) aim(ev); });
     cv.addEventListener('pointerup', () => { dragging = false; });
     cv.addEventListener('pointercancel', () => { dragging = false; });
-    $('launchBtn').addEventListener('click', () => Wd.launch(s));
+    $('launchBtn').addEventListener('click', () => Wd.launch(s, s.view));
     $('travelBtn').addEventListener('click', () => Wd.travel(s));
+    $('viewGround').addEventListener('click', () => setView('ground'));
+    $('viewOrbit').addEventListener('click', () => setView('orbit'));
     document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   }
 
   /* ---------- Boucle ---------- */
-  let lastUi = 0, lastSave = Date.now();
+  let lastUi = 0, lastSave = Date.now(), lastAch = 0, lastTick = Date.now(), nextWreck = Date.now() + 45000;
   function loop(now) {
-    const dt = R.frame(now);
-    if (dt) Wd.update(s, dt);
-    if (now - lastUi > 120) { lastUi = now; hud(); refreshGear(); if (tab === 'opt') refreshStats(); }
-    if (Date.now() - lastSave > 10000) { Wd.save(s); lastSave = Date.now(); }
+    const dt = R.frame(now, s.view === 'ground'); O.frame(now, s.view === 'orbit');
+    const real = Date.now(), gap = (real - lastTick) / 1000; lastTick = real;
+    if (gap > 10) awayReturn(gap); else if (dt) Wd.update(s, dt);
+    if (now - lastUi > 150) { lastUi = now; hud(); P.render(false); }
+    if (real - lastAch > 1000) { lastAch = real; Wd.checkAch(s); }
+    if (real > nextWreck && !document.hidden) { const sz = R.size(); if (R.spawnWreck(sz.W, sz.H)) nextWreck = real + Wd.wreckInterval(s) * (0.6 + Math.random() * 0.8) * 1000; }
+    if (real - lastSave > 10000) { Wd.save(s); lastSave = real; }
     requestAnimationFrame(loop);
+  }
+  function awayReturn(secs) {
+    const r = Wd.offline(s, secs);
+    if (!r || secs < 60 || !r.n) return;
+    const lines = [T('offlineText', { time: fmtTime(secs), n: fmt(r.n), m: fmt(r.money) })];
+    if (r.stop) lines.push(T('offlineStop'));
+    modal(T('welcomeBack'), lines, [{ label: T('continue'), cls: 'btn-sun' }]);
   }
   function afterLoad() {
     lang = s.settings.lang || ((navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en');
-    lastStage = -1; setLang(lang);
+    lastStage = -1; P.sig = {}; setLang(lang);
   }
   function start(data) {
     s = null;
-    if (data && data.save) { try { const o = JSON.parse(data.save); if (o && o.v === 3) { s = Wd.fresh(); Object.assign(s, o); } } catch (e) { s = null; } }
-    const loaded = !!(s || (s = Wd.load()));
+    if (data && data.save) { try { s = Wd.revive(JSON.parse(data.save)); } catch (e) { s = null; } }
+    const fromHot = !!s, loaded = !!(s || (s = Wd.load()));
     if (!s) s = Wd.fresh();
+    if (!s.ship) s.view = 'ground';
     Wd.reset(s);
-    R.init($('scene'), () => s);
+    R.init($('scene'), () => s); O.init($('scene'), () => s);
     G.dbg = () => s; // accès de test depuis la console
     try { const t = localStorage.getItem('feedthesun.v3.tab'); if (t && $('tab-' + t)) tab = t; } catch (e) { /* stockage indisponible */ }
     bindInputs(); afterLoad();
+    if (loaded && !fromHot) awayReturn((Date.now() - s.last) / 1000);
     if (!loaded) modal(T('introTitle'), [T('introText1'), T('introText2')], [{ label: T('introGo'), cls: 'btn-sun' }]);
+    lastTick = Date.now();
     requestAnimationFrame(loop);
     document.addEventListener('visibilitychange', () => { if (document.hidden) Wd.save(s); });
     window.addEventListener('pagehide', () => Wd.save(s));
-    document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { try { localStorage.setItem('feedthesun.v3.tab', b.dataset.tab); } catch (e) { /* stockage indisponible */ } }));
     if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({ save: JSON.stringify(s) }));
   }
   const hot = window.claude && window.claude.hot;

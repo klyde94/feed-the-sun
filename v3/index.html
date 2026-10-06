@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Feed the Sun</title>
+<meta name="theme-color" content="#05060b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Martian+Mono:wght@400;500;700&family=Michroma&display=swap">
 <link rel="stylesheet" href="style.css">
-<meta name="description" content="Feed the Sun v3 : joue l'éboueur, remplis ton conteneur et lance-le dans le soleil.">
 </head>
 <body>
 <div class="app" id="app">
@@ -19,6 +22,13 @@
       <div class="brand">Feed the Sun</div>
       <div class="credits"><span id="money">0</span><span class="unit">$</span></div>
       <div class="rates"><span id="sent">0</span> <span data-i18n="sent">déchets envoyés</span></div>
+      <div class="lvl"><span id="lvlTxt">Niveau 1</span><span class="pts" id="ptsTxt"></span></div>
+      <div class="bar xp"><div class="bar-fill" id="xpBar"></div></div>
+      <div class="loads">
+        <div class="load"><div class="load-top"><span id="loadName">Sac</span><span id="bagTxt">0/5</span></div><div class="bar"><div class="bar-fill load-fill" id="bagBar"></div></div></div>
+        <div class="load"><div class="load-top"><span id="contName">Conteneur</span><span id="contTxt">0/20</span></div><div class="bar"><div class="bar-fill load-fill" id="contBar"></div></div></div>
+        <div class="load"><div class="load-top"><span data-i18n="pollution">Pollution</span><span id="pollTxt">100 %</span></div><div class="bar"><div class="bar-fill" id="pollBar"></div></div></div>
+      </div>
     </div>
 
     <div class="hud hud-right">
@@ -27,15 +37,14 @@
       <div class="sun-meta"><span class="sun-dot"></span><span id="sunMeta"></span></div>
     </div>
 
+    <div class="view-seg seg" id="viewSeg" hidden>
+      <button type="button" class="seg-btn" id="viewGround" data-i18n="ground">Sol</button>
+      <button type="button" class="seg-btn" id="viewOrbit" data-i18n="orbit">Orbite</button>
+    </div>
+    <div class="boost" id="boost" hidden></div>
     <div class="hint" id="hint" hidden></div>
 
-    <div class="loads">
-      <div class="load"><div class="load-top"><span data-i18n="bag">Sac</span><span id="bagTxt">0/5</span></div><div class="bar"><div class="bar-fill load-fill" id="bagBar"></div></div></div>
-      <div class="load"><div class="load-top"><span data-i18n="container">Conteneur</span><span id="contTxt">0/20</span></div><div class="bar"><div class="bar-fill load-fill" id="contBar"></div></div></div>
-      <div class="load"><div class="load-top"><span data-i18n="pollution">Pollution</span><span id="pollTxt">100 %</span></div><div class="bar"><div class="bar-fill" id="pollBar"></div></div></div>
-    </div>
-
-    <button class="fire" id="launchBtn" type="button"><span data-i18n="launch">Lancer</span><kbd id="launchSub">Entrée</kbd></button>
+    <button class="fire" id="launchBtn" type="button"><span data-i18n="launch">Lancer</span><kbd data-i18n="launchKey">Entrée</kbd></button>
 
     <div class="banner" id="banner" hidden>
       <div class="banner-title" id="bannerTitle"></div>
@@ -46,12 +55,16 @@
 
   <aside class="log" id="panel">
     <nav class="tabs" role="tablist">
-      <button type="button" role="tab" data-tab="gear" id="tabbtn-gear"><span data-i18n="tabGear">Équipement</span><span class="dot" id="gearDot" hidden></span></button>
-      <button type="button" role="tab" data-tab="team" id="tabbtn-team"><span data-i18n="tabTeam">Équipe</span></button>
-      <button type="button" role="tab" data-tab="opt" id="tabbtn-opt"><span data-i18n="tabOpt">Options</span></button>
+      <button type="button" role="tab" data-tab="gear"><span data-i18n="tabGear">Équipement</span><span class="dot" id="dot-gear" hidden></span></button>
+      <button type="button" role="tab" data-tab="team"><span data-i18n="tabTeam">Équipe</span><span class="dot" id="dot-team" hidden></span></button>
+      <button type="button" role="tab" data-tab="trees"><span data-i18n="tabTrees">Arbres</span><span class="dot" id="dot-trees" hidden></span></button>
+      <button type="button" role="tab" data-tab="galaxy"><span data-i18n="tabGalaxy">Galaxie</span><span class="dot" id="dot-galaxy" hidden></span></button>
+      <button type="button" role="tab" data-tab="opt"><span data-i18n="tabOpt">Options</span></button>
     </nav>
     <div class="tab-body" id="tab-gear" role="tabpanel"></div>
     <div class="tab-body" id="tab-team" role="tabpanel" hidden></div>
+    <div class="tab-body" id="tab-trees" role="tabpanel" hidden></div>
+    <div class="tab-body" id="tab-galaxy" role="tabpanel" hidden></div>
     <div class="tab-body" id="tab-opt" role="tabpanel" hidden></div>
   </aside>
 </div>
@@ -67,8 +80,11 @@
 </div>
 
 <script src="data.js"></script>
+<script src="i18n.js"></script>
 <script src="world.js"></script>
 <script src="render.js"></script>
+<script src="orbit.js"></script>
+<script src="panels.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

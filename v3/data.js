@@ -1,17 +1,22 @@
 'use strict';
-/* Feed the Sun v3 — étape 1 (phase au sol) : réglages et textes FR/EN.
-   Unités du monde : l'écran fait 100 unités de haut, le monde 360 de large. */
+/* Feed the Sun v3 — réglages du jeu (étapes 1 à 5). Textes affichés : i18n.js.
+   Unités du monde : la scène fait 100 unités de haut. */
 const G = (window.FTS3 = window.FTS3 || {});
 
 G.SAVE_KEY = 'feedthesun.v3.save';
-G.WORLD_W = 260;
-G.BASE_X = 24;            // conteneur
-G.RAMP_X = 9;             // rampe de lancement
-G.GROUND_TOP = 75;
-G.GROUND_BOTTOM = 94;
-G.VISIBLE_MAX = 34;       // déchets visibles au sol en même temps
-G.SPEED = 26;             // vitesse de marche de base (unités/s)
-G.FULL_BONUS = 1.1;       // conteneur plein : +10 %
+G.VERSION = 3;
+
+/* ---------- Zones ---------- */
+G.ZONES = {
+  ground: { w: 260, base: 24, ramp: 9, top: 75, bottom: 94, visible: 34, spawnMin: 42 },
+  orbit: { w: 220, base: 22, baseY: 60, top: 16, bottom: 68, visible: 26, spawnMin: 40 },
+};
+G.SPEED = 26;              // marche du joueur
+G.SHIP_SPEED = 34;         // vaisseau du joueur
+G.EMP_SPEED = 17;          // éboueurs
+G.PILOT_SPEED = 22;        // pilotes
+G.FULL_BONUS = 1.1;        // conteneur plein : +10 %
+G.LAUNCH_TIME = 1.4;       // temps avant qu'un nouveau conteneur arrive
 
 G.JUNK = {
   bag: { value: 1, size: 2.6, col: [214, 210, 196] },
@@ -20,92 +25,95 @@ G.JUNK = {
   tire: { value: 3, size: 3, col: [52, 50, 48] },
   barrel: { value: 5, size: 3.1, col: [204, 156, 52] },
   fridge: { value: 8, size: 3.6, col: [226, 226, 218] },
+  bolt: { value: 4, size: 1.6, col: [170, 176, 190] },
+  panel: { value: 8, size: 2.8, col: [70, 92, 150] },
+  sat: { value: 14, size: 2.6, col: [160, 176, 200] },
+  stage: { value: 22, size: 3, col: [206, 202, 192] },
 };
-G.JUNK_WEIGHTS = [['bag', 30], ['can', 24], ['bottle', 20], ['tire', 12], ['barrel', 9], ['fridge', 5]];
+G.WEIGHTS = {
+  ground: [['bag', 30], ['can', 24], ['bottle', 20], ['tire', 12], ['barrel', 9], ['fridge', 5]],
+  orbit: [['bolt', 40], ['panel', 30], ['sat', 20], ['stage', 10]],
+};
+G.GOLD_CHANCE = { ground: 0.014, orbit: 0.022 };
+G.GOLD_VALUE = 3;
 
-G.planetItems = n => Math.round(240 * Math.pow(2.2, n));
+G.planetItems = (n, zone) => Math.round((zone === 'orbit' ? 50 : 240) * Math.pow(2.2, n));
 G.planetValue = n => Math.pow(1.6, n);
+G.JUMP_REQ = 3;
+G.CRYSTAL_BONUS = 0.1;     // +10 % de dollars par cristal
 
 G.PLANETS = [
-  { bad: 'Ordura', good: 'Aurora', grass: [86, 160, 96], sky: [96, 170, 230] },
-  { bad: 'Smogon', good: 'Selena', grass: [120, 170, 84], sky: [80, 160, 200] },
-  { bad: 'Plastika', good: 'Pacifica', grass: [70, 150, 120], sky: [70, 130, 220] },
-  { bad: 'Rouillor', good: 'Floralis', grass: [140, 176, 88], sky: [110, 160, 220] },
-  { bad: 'Toxia', good: 'Thalassa', grass: [84, 170, 110], sky: [60, 150, 210] },
+  { bad: 'Ordura', good: 'Aurora', grass: [86, 160, 96], sky: [96, 170, 230], sea: [47, 111, 168] },
+  { bad: 'Smogon', good: 'Selena', grass: [120, 170, 84], sky: [80, 160, 200], sea: [43, 125, 154] },
+  { bad: 'Plastika', good: 'Pacifica', grass: [70, 150, 120], sky: [70, 130, 220], sea: [37, 96, 184] },
+  { bad: 'Rouillor', good: 'Floralis', grass: [140, 176, 88], sky: [110, 160, 220], sea: [58, 111, 160] },
+  { bad: 'Toxia', good: 'Thalassa', grass: [84, 170, 110], sky: [60, 150, 210], sea: [31, 120, 168] },
 ];
 
-const t2 = (fr, en) => ({ fr, en });
-G.UPGRADES = [
-  { id: 'bag', base: 12, growth: 1.55, max: 20, eff: l => 5 + 2 * l,
-    name: t2('Sac plus grand', 'Bigger bag'), desc: t2('+2 places dans ton sac.', '+2 slots in your bag.'), unit: t2('{v} places', '{v} slots') },
-  { id: 'boots', base: 18, growth: 1.6, max: 15, eff: l => 1 + 0.12 * l,
-    name: t2('Bottes rapides', 'Fast boots'), desc: t2('Tu marches 12 % plus vite.', 'You walk 12% faster.'), unit: t2('×{v} vitesse', '×{v} speed') },
-  { id: 'container', base: 25, growth: 1.6, max: 20, eff: l => 20 + 10 * l,
-    name: t2('Conteneur plus grand', 'Bigger container'), desc: t2('+10 places dans le conteneur.', '+10 slots in the container.'), unit: t2('{v} places', '{v} slots') },
-  { id: 'magnet', base: 40, growth: 1.7, max: 10, eff: l => 3 + 1.4 * l,
-    name: t2('Pince à long manche', 'Long grabber'), desc: t2('Tu attrapes les déchets de plus loin.', 'You grab trash from further away.'), unit: t2('portée {v}', 'reach {v}') },
-  { id: 'ramp', base: 60, growth: 1.75, max: 20, eff: l => 1 + 0.15 * l,
-    name: t2('Rampe renforcée', 'Reinforced ramp'), desc: t2('Chaque conteneur rapporte 15 % de plus.', 'Each container pays 15% more.'), unit: t2('×{v} dollars', '×{v} dollars') },
+/* ---------- Équipement (dollars) ---------- */
+G.GEAR = [
+  { id: 'bag', who: 'me', base: 12, growth: 1.55, max: 20, eff: l => 5 + 2 * l },
+  { id: 'boots', who: 'me', base: 18, growth: 1.6, max: 15, eff: l => 1 + 0.12 * l },
+  { id: 'container', who: 'me', base: 25, growth: 1.6, max: 20, eff: l => 20 + 10 * l },
+  { id: 'magnet', who: 'me', base: 40, growth: 1.7, max: 10, eff: l => 3 + 1.4 * l },
+  { id: 'ramp', who: 'me', base: 60, growth: 1.75, max: 25, eff: l => 1 + 0.15 * l },
+  { id: 'hold', who: 'ship', base: 150, growth: 1.6, max: 20, eff: l => 6 + 3 * l },
+  { id: 'thrust', who: 'ship', base: 180, growth: 1.65, max: 15, eff: l => 1 + 0.12 * l },
+  { id: 'tractor', who: 'ship', base: 220, growth: 1.7, max: 10, eff: l => 4 + 1.6 * l },
+  { id: 'cannon', who: 'ship', base: 300, growth: 1.75, max: 25, eff: l => 1 + 0.15 * l },
+];
+G.SHIP_COST = 250;
+
+/* ---------- Équipe (dollars) ---------- */
+G.HIRES = [
+  { id: 'collector', zone: 'ground', base: 30, growth: 1.32, max: 30 },
+  { id: 'operator', zone: 'ground', base: 120, growth: 1, max: 1 },
+  { id: 'pilot', zone: 'orbit', base: 400, growth: 1.38, max: 20, needShip: true },
+  { id: 'gunner', zone: 'orbit', base: 900, growth: 1, max: 1, needShip: true },
+];
+G.TEAM_UPS = [
+  { id: 'trolleys', base: 80, growth: 1.8, max: 6, eff: l => l },
+  { id: 'training', base: 100, growth: 1.7, max: 12, eff: l => 1 + 0.1 * l },
+];
+G.empXpNeed = lvl => Math.round(20 * Math.pow(lvl, 1.5));
+
+/* ---------- Niveau du joueur et compétences (points forts) ---------- */
+G.xpNeed = lvl => Math.round(25 * Math.pow(1.32, lvl - 1));
+G.SKILLS = [
+  { branch: 'me', nodes: [{ id: 'pockets', cost: 1 }, { id: 'sprint', cost: 1 }, { id: 'broom', cost: 2 }, { id: 'lynx', cost: 2 }, { id: 'sorter', cost: 3 }] },
+  { branch: 'pilot', nodes: [{ id: 'reactors', cost: 1 }, { id: 'doubleHold', cost: 2 }, { id: 'debrisMagnet', cost: 2 }, { id: 'trainedPilots', cost: 2 }, { id: 'orbitalShot', cost: 3 }] },
+  { branch: 'boss', nodes: [{ id: 'recruiter', cost: 1 }, { id: 'carts', cost: 1 }, { id: 'teamSpirit', cost: 2 }, { id: 'allNighter', cost: 2 }, { id: 'proDriver', cost: 3 }] },
 ];
 
-/* Le soleil change de couleur avec le nombre de déchets envoyés (toutes planètes confondues). */
+/* ---------- Technologies (ordures dorées, points faibles) ---------- */
+G.TECHS = [
+  { branch: 'capture', nodes: [{ id: 'net', max: 3 }, { id: 'harpoon', max: 5 }, { id: 'magnetic', max: 5 }, { id: 'arm', max: 3 }] },
+  { branch: 'propulsion', nodes: [{ id: 'tether', max: 5 }, { id: 'laser', max: 3 }, { id: 'ion', max: 5 }, { id: 'driver', max: 5 }] },
+  { branch: 'logistics', nodes: [{ id: 'sorting', max: 10 }, { id: 'vests', max: 5 }, { id: 'radar', max: 3 }, { id: 'prospect', max: 5 }] },
+];
+G.techCost = lvl => 1 + lvl;   // niveau 0→1 : 1 point, 1→2 : 2 points…
+
+/* ---------- Soleil ---------- */
 G.SUN = [
-  { at: 0, k: 3200, rgb: [255, 98, 66], name: t2('Naine rouge', 'Red dwarf') },
-  { at: 150, k: 4600, rgb: [255, 150, 74], name: t2('Étoile orange', 'Orange star') },
-  { at: 1500, k: 5800, rgb: [255, 212, 118], name: t2('Naine jaune', 'Yellow dwarf') },
-  { at: 12000, k: 7200, rgb: [255, 238, 200], name: t2('Étoile blanc-jaune', 'Yellow-white star') },
-  { at: 80000, k: 9800, rgb: [236, 242, 255], name: t2('Étoile blanche', 'White star') },
+  { at: 0, k: 3200, rgb: [255, 98, 66] },
+  { at: 150, k: 4600, rgb: [255, 150, 74] },
+  { at: 1500, k: 5800, rgb: [255, 212, 118] },
+  { at: 12000, k: 7200, rgb: [255, 238, 200] },
+  { at: 80000, k: 9800, rgb: [236, 242, 255] },
+  { at: 500000, k: 21000, rgb: [168, 198, 255] },
+  { at: 3e6, k: 42000, rgb: [126, 158, 255] },
+  { at: 2e7, k: 90000, rgb: [196, 140, 255] },
 ];
 
-G.I18N = {
-  fr: {
-    money: 'dollars', sent: 'déchets envoyés', planetN: 'Planète {n}', pollution: 'Pollution', left: '{n} déchets restants',
-    launch: 'Lancer', launchKey: 'Entrée', bag: 'Sac', container: 'Conteneur',
-    tabGear: 'Équipement', tabTeam: 'Équipe', tabOpt: 'Options',
-    lvl: 'Niv. {n}', maxed: 'Au maximum', now: 'Actuel : {v}',
-    teamTitle: 'Tes employés arrivent à l’étape 2',
-    teamText: 'Bientôt, tu pourras embaucher des éboueurs qui ramassent à ta place, puis un conducteur de rampe qui lance les conteneurs tout seul. Ils te suivront de planète en planète.',
-    teamCard1: 'Éboueur', teamCard1d: 'Ramasse les déchets et remplit le conteneur.', teamCard2: 'Conducteur de rampe', teamCard2d: 'Lance chaque conteneur plein.', soon: 'Étape 2',
-    lang: 'Langue', sound: 'Son', on: 'Activé', off: 'Coupé', controls: 'Commandes',
-    controlsText: 'Clique ou touche le sol pour marcher. Clavier : ZQSD ou flèches. Entrée : lancer le conteneur.',
-    resetTitle: 'Recommencer de zéro', resetBtn: 'Effacer ma partie', resetConfirm: 'Effacer définitivement ta partie ?', resetText: 'Tout sera perdu.', resetGo: 'Tout effacer', cancel: 'Annuler',
-    stats: 'Statistiques', stTime: 'Temps de jeu', stSent: 'Déchets envoyés', stMoney: 'Dollars gagnés', stPlanets: 'Planètes sauvées',
-    hint0: 'Clique sur un déchet (ou utilise ZQSD) pour aller le ramasser.',
-    hint1: 'Sac plein ! Ramène-le au conteneur, tout à gauche.',
-    hint2: 'Lance le conteneur vers le soleil : bouton Lancer ou touche Entrée.',
-    hint3: 'Ouvre l’Équipement et achète un sac plus grand.',
-    bagFull: 'Sac plein', contFull: 'Conteneur plein : lance-le !',
-    launchToast: '+{m} $', fullBonus: 'Conteneur plein : +10 %',
-    cleanTitle: '{name} est sauvée !', cleanText: 'L’ancienne {old} respire à nouveau. Prochaine planète : {next}, plus sale mais mieux payée.', travel: 'Cap sur {next}',
-    sunToast: 'Ton soleil change de couleur', sunText: '{name}, {k} K',
-    introTitle: 'Mission : nettoyer Ordura', introText1: 'Ordura étouffe sous les ordures. Tu commences seul, avec un sac et un conteneur.',
-    introText2: 'Ramasse les déchets, vide ton sac dans le conteneur, puis lance-le droit dans le soleil. Chaque conteneur rapporte des dollars.',
-    introGo: 'C’est parti', version: 'Version 3, étape 1 : la phase au sol', oldVersion: 'Jouer à la v2', plan: 'Voir le plan du jeu',
-    h: 'h', min: 'min', s: 's',
-  },
-  en: {
-    money: 'dollars', sent: 'trash sent', planetN: 'Planet {n}', pollution: 'Pollution', left: '{n} pieces of trash left',
-    launch: 'Launch', launchKey: 'Enter', bag: 'Bag', container: 'Container',
-    tabGear: 'Gear', tabTeam: 'Team', tabOpt: 'Options',
-    lvl: 'Lv. {n}', maxed: 'Maxed out', now: 'Now: {v}',
-    teamTitle: 'Your crew arrives in step 2',
-    teamText: 'Soon you will hire binmen who pick up trash for you, then a ramp operator who launches containers on their own. They will follow you from planet to planet.',
-    teamCard1: 'Binman', teamCard1d: 'Picks up trash and fills the container.', teamCard2: 'Ramp operator', teamCard2d: 'Launches every full container.', soon: 'Step 2',
-    lang: 'Language', sound: 'Sound', on: 'On', off: 'Off', controls: 'Controls',
-    controlsText: 'Click or tap the ground to walk. Keyboard: WASD or arrows. Enter: launch the container.',
-    resetTitle: 'Start over', resetBtn: 'Erase my game', resetConfirm: 'Erase your game for good?', resetText: 'Everything will be lost.', resetGo: 'Erase everything', cancel: 'Cancel',
-    stats: 'Statistics', stTime: 'Play time', stSent: 'Trash sent', stMoney: 'Dollars earned', stPlanets: 'Planets saved',
-    hint0: 'Click a piece of trash (or use WASD) to go and pick it up.',
-    hint1: 'Bag full! Bring it back to the container, far left.',
-    hint2: 'Launch the container into the sun: Launch button or Enter key.',
-    hint3: 'Open your Gear and buy a bigger bag.',
-    bagFull: 'Bag full', contFull: 'Container full: launch it!',
-    launchToast: '+{m} $', fullBonus: 'Full container: +10%',
-    cleanTitle: '{name} is saved!', cleanText: 'What used to be {old} can breathe again. Next planet: {next}, dirtier but better paid.', travel: 'Set course for {next}',
-    sunToast: 'Your sun changes color', sunText: '{name}, {k} K',
-    introTitle: 'Mission: clean up Ordura', introText1: 'Ordura is choking on garbage. You start alone, with a bag and a container.',
-    introText2: 'Pick up trash, empty your bag into the container, then launch it straight into the sun. Every container pays dollars.',
-    introGo: 'Let’s go', version: 'Version 3, step 1: the ground phase', oldVersion: 'Play v2', plan: 'See the game plan',
-    h: 'h', min: 'min', s: 's',
-  },
-};
+/* ---------- Succès (+2 % de dollars chacun) ---------- */
+G.ACH_BONUS = 0.02;
+G.ACHIEVEMENTS = [
+  { id: 'launch1', ok: s => s.sent >= 1 }, { id: 'sent100', ok: s => s.sent >= 100 }, { id: 'sent1k', ok: s => s.sent >= 1000 },
+  { id: 'sent10k', ok: s => s.sent >= 10000 }, { id: 'sent100k', ok: s => s.sent >= 100000 },
+  { id: 'hire1', ok: s => s.team.collector >= 1 }, { id: 'hire10', ok: s => s.team.collector >= 10 }, { id: 'operator', ok: s => s.team.operator >= 1 },
+  { id: 'ship', ok: s => s.ship }, { id: 'pilot1', ok: s => s.team.pilot >= 1 },
+  { id: 'lvl5', ok: s => s.level >= 5 }, { id: 'lvl15', ok: s => s.level >= 15 },
+  { id: 'gold1', ok: s => s.goldLife >= 1 }, { id: 'gold25', ok: s => s.goldLife >= 25 },
+  { id: 'planet1', ok: s => s.saved >= 1 }, { id: 'planet3', ok: s => s.saved >= 3 }, { id: 'planet10', ok: s => s.saved >= 10 },
+  { id: 'wreck1', ok: s => s.wrecks >= 1 }, { id: 'jump1', ok: s => s.jumps >= 1 }, { id: 'sunYellow', ok: s => s.sent >= 1500 },
+];
