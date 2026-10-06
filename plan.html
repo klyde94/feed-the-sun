@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feed the Sun, plan v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Martian+Mono:wght@400;600&family=Michroma&display=swap">
+<style>
+/* Plan : un carnet de mission. Une colonne de lecture, les phases comme des étapes de vol, les arbres côte à côte.
+   Ambiance sombre assumée, comme le jeu. L'accent est la lumière du soleil (naine jaune). */
+:root {
+  color-scheme: dark;
+  --void: #06070c;
+  --panel: #0d1019;
+  --line: #242a3b;
+  --ink: #ece6d9;
+  --mute: #9893a6;
+  --sun: #ffd36b;
+  --clean: #8fe8b4;
+  --sky: #9fd3ff;
+  --font-display: 'Michroma', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-data: 'Martian Mono', ui-monospace, Consolas, monospace;
+}
+html { background: var(--void); }
+body { margin: 0; background: var(--void); color: var(--ink); font: 16px/1.6 var(--font-body); padding-inline: 16px; padding-block: 0 64px; }
+.wrap { max-width: 780px; margin: 0 auto; }
+header { padding-block: 56px 32px; border-bottom: 1px solid var(--line); position: relative; }
+header::before { content: ''; position: absolute; left: -10%; top: -40px; width: 340px; height: 340px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 211, 107, 0.28), rgba(255, 211, 107, 0) 65%); pointer-events: none; }
+.eyebrow { font: 12px var(--font-data); color: var(--mute); letter-spacing: 0.04em; position: relative; }
+h1 { font: clamp(30px, 6vw, 48px)/1.15 var(--font-display); margin: 14px 0 16px; text-wrap: balance; position: relative; }
+.lead { font-size: 19px; color: var(--ink); max-width: 62ch; margin: 0; position: relative; text-wrap: balance; }
+h2 { font: 15px/1.4 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sun); margin: 56px 0 16px; }
+h3 { font-size: 18px; margin: 0 0 6px; }
+p { margin: 0 0 12px; max-width: 68ch; }
+.muted { color: var(--mute); }
+ul { margin: 0 0 12px; padding-left: 20px; }
+li { margin-bottom: 6px; }
+a { color: var(--sky); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+
+.loop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.step { font-weight: 600; font-size: 14px; padding: 8px 12px; border-radius: 10px; background: #161a27; border: 1px solid var(--line); }
+.step.sun { border-color: var(--sun); color: var(--sun); }
+.arrow { color: var(--mute); font-family: var(--font-data); }
+.loop-note { flex-basis: 100%; font-size: 13px; color: var(--mute); margin-top: 6px; }
+
+.phases { display: grid; gap: 14px; }
+.phase { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; padding: 20px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
+.phase-n { font: 26px var(--font-display); color: var(--sun); line-height: 1; padding-top: 4px; }
+.phase .when { font: 12px var(--font-data); color: var(--mute); margin-bottom: 10px; }
+.phase p:last-child, .phase ul:last-child { margin-bottom: 0; }
+
+.trees { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.tree { padding: 20px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+.tree .tag { display: inline-block; font: 11px var(--font-data); padding: 3px 8px; border-radius: 6px; margin-bottom: 10px; }
+.tree.strong .tag { background: rgba(255, 211, 107, 0.15); color: var(--sun); }
+.tree.weak .tag { background: rgba(143, 232, 180, 0.13); color: var(--clean); }
+.branch { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.branch b { display: block; font-size: 14px; }
+.branch span { font-size: 14px; color: var(--mute); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 12px var(--font-data); color: var(--mute); font-weight: 400; background: var(--panel); }
+tr:last-child td { border-bottom: 0; }
+
+.milestones { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.milestones li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); margin: 0; }
+.milestones .k { font: 12px var(--font-data); color: var(--sun); padding-top: 3px; }
+.milestones li.now { border-color: var(--sun); background: rgba(255, 211, 107, 0.05); }
+
+.q { padding: 16px 18px; border-radius: 14px; border: 1px dashed var(--line); margin-bottom: 10px; }
+.q b { display: block; margin-bottom: 4px; }
+.reco { font-size: 14px; color: var(--clean); }
+.cta { display: inline-block; margin-top: 8px; padding: 12px 18px; border-radius: 12px; background: var(--sun); color: #1a1206; font-weight: 700; text-decoration: none; }
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; color: var(--mute); }
+
+@media (max-width: 640px) {
+  .trees { grid-template-columns: minmax(0, 1fr); }
+  .phase { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .milestones li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Plan de conception · version 3 · 7 octobre 2026</div>
+    <h1>Feed the Sun</h1>
+    <p class="lead">On commence éboueur, à la main, sur une planète couverte d'ordures. On finit à la tête d'une flotte et d'une armée d'employés qui nourrissent le soleil pendant qu'on dort.</p>
+  </header>
+
+  <h2>La boucle de jeu</h2>
+  <div class="loop" role="list">
+    <span class="step" role="listitem">Ramasser</span><span class="arrow" aria-hidden="true">→</span>
+    <span class="step" role="listitem">Remplir le conteneur</span><span class="arrow" aria-hidden="true">→</span>
+    <span class="step sun" role="listitem">Lancer vers le soleil</span><span class="arrow" aria-hidden="true">→</span>
+    <span class="step" role="listitem">Gagner des $</span><span class="arrow" aria-hidden="true">→</span>
+    <span class="step" role="listitem">Embaucher</span><span class="arrow" aria-hidden="true">→</span>
+    <span class="step" role="listitem">Automatiser</span>
+    <span class="loop-note">Au début, tu fais chaque étape toi-même. Petit à petit, tes employés et tes vaisseaux les font à ta place, et tu passes au jeu idle.</span>
+  </div>
+
+  <h2>Les trois phases</h2>
+  <div class="phases">
+    <section class="phase">
+      <div class="phase-n">1</div>
+      <div>
+        <h3>Au sol : l'éboueur</h3>
+        <div class="when">0 à 10 minutes · vue de côté en 2,5D</div>
+        <p>Tu incarnes un petit éboueur sur la planète. Le décor est fait de couches qui défilent à des vitesses différentes, pour donner de la profondeur.</p>
+        <ul>
+          <li>Tu te déplaces au clic, au doigt sur téléphone, ou au clavier (ZQSD ou flèches).</li>
+          <li>Tu ramasses les déchets au sol. Ton sac en contient 5 au début.</li>
+          <li>Tu vides ton sac dans le conteneur, à côté de la rampe de lancement.</li>
+          <li>Conteneur plein : tu appuies sur Lancer, et on le voit partir vers le soleil. Un aller-retour dure 5 à 10 secondes.</li>
+          <li>Chaque conteneur rapporte des dollars. Tu embauches ton premier employé vers la 3e minute.</li>
+        </ul>
+      </div>
+    </section>
+    <section class="phase">
+      <div class="phase-n">2</div>
+      <div>
+        <h3>En orbite : le vaisseau-benne</h3>
+        <div class="when">Vers 10 à 20 minutes · vue spatiale de la v2</div>
+        <p>Tu achètes ton vaisseau. Tu voles parmi les débris en orbite (satellites morts, étages de fusée, bidons), tu remplis la soute et tu la ramènes au canon orbital. Pendant ce temps, tes employés continuent le travail au sol.</p>
+      </div>
+    </section>
+    <section class="phase">
+      <div class="phase-n">3</div>
+      <div>
+        <h3>La flotte : le jeu idle</h3>
+        <div class="when">À partir de 20 minutes · tout tourne seul</div>
+        <p>Les éboueurs ramassent, les conducteurs lancent, les pilotes vident l'orbite, et des vaisseaux d'aide envoient leurs propres conteneurs (on les voit partir). Ton rôle : lancer quand tu veux, embaucher, répartir tes équipes, attraper les ordures dorées et faire grandir tes deux arbres.</p>
+      </div>
+    </section>
+  </div>
+
+  <h2>Les employés universels</h2>
+  <p>Ils te suivent de planète en planète. Une équipe bâtie sur Ordura travaille aussi sur la planète suivante : on ne repart jamais de zéro, sauf au saut galactique.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Métier</th><th>Ce qu'il fait</th><th>Débloqué</th></tr></thead>
+      <tbody>
+        <tr><td>Éboueur</td><td>Ramasse les déchets au sol et remplit le conteneur</td><td>Dès la phase 1</td></tr>
+        <tr><td>Conducteur de rampe</td><td>Lance tout seul chaque conteneur plein</td><td>Phase 1, après 3 éboueurs</td></tr>
+        <tr><td>Pilote</td><td>Vole un vaisseau d'aide et vide l'orbite</td><td>Phase 2</td></tr>
+        <tr><td>Ingénieur</td><td>Fait marcher les vraies technologies (filet, harpon, laser…)</td><td>Arbre technologique</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top:12px">Chaque employé gagne de l'expérience et monte en niveau. Le prix d'embauche augmente à chaque recrue, comme les engins de la v2.</p>
+
+  <h2>Deux arbres, deux monnaies</h2>
+  <div class="trees">
+    <section class="tree strong">
+      <span class="tag">Points forts · rares</span>
+      <h3>Niveau du joueur → compétences</h3>
+      <p class="muted">Chaque tonne envoyée au soleil donne de l'expérience. Chaque niveau gagné donne 1 point de compétence. Les compétences sont puissantes et changent ta façon de jouer.</p>
+      <div class="branch"><b>Éboueur</b><span>Sac plus grand, course rapide, « Coup de balai » qui ramasse tout autour de toi</span></div>
+      <div class="branch"><b>Pilote</b><span>Vaisseau plus rapide, aimant à débris, soute double</span></div>
+      <div class="branch"><b>Chef d'équipe</b><span>Employés moins chers et plus rapides, gains hors ligne plus longs</span></div>
+    </section>
+    <section class="tree weak">
+      <span class="tag">Points faibles · fréquents</span>
+      <h3>Ordures dorées → technologies</h3>
+      <p class="muted">De temps en temps, un déchet brille parmi les autres. Le ramasser donne 1 point technologique (parfois 3). Chaque nœud apporte un petit bonus, mais il y en a beaucoup.</p>
+      <div class="branch"><b>Capture</b><span>Filet, harpon, capture magnétique, bras robotique</span></div>
+      <div class="branch"><b>Propulsion</b><span>Câble électrodynamique, laser d'ablation, faisceau d'ions, canon électromagnétique</span></div>
+      <div class="branch"><b>Logistique</b><span>Conteneurs plus grands, rampes plus rapides, vaisseaux d'aide</span></div>
+    </section>
+  </div>
+  <p class="muted" style="margin-top:12px">Garde-fou tiré de la recherche : si les points sont trop rares, le joueur finit par dépenser dans des nœuds sans intérêt. Chaque nœud doit donc rester utile, même les petits.</p>
+
+  <h2>Ce qu'on garde de la v2</h2>
+  <ul>
+    <li>Les planètes qui guérissent et changent de nom (Ordura devient Aurora).</li>
+    <li>Le soleil qui change de couleur, de la naine rouge à l'étoile prismatique.</li>
+    <li>Les vraies technologies et leurs « Le savais-tu ? ».</li>
+    <li>Les épaves scintillantes (bonus), le saut galactique (prestige), les succès, les gains hors ligne.</li>
+    <li>Les crédits deviennent des dollars.</li>
+  </ul>
+
+  <h2>Les étapes de construction</h2>
+  <ol class="milestones">
+    <li class="now"><span class="k">Étape 1</span><div><b>Phase au sol jouable.</b> Éboueur, sac, conteneur, rampe, dollars. Clic, clavier et doigt. Lien jouable à la fin.</div></li>
+    <li><span class="k">Étape 2</span><div><b>Employés.</b> Embauche, éboueurs et conducteurs automatiques, gains hors ligne.</div></li>
+    <li><span class="k">Étape 3</span><div><b>Orbite.</b> Vaisseau-benne, canon orbital, pilotes et vaisseaux d'aide visibles.</div></li>
+    <li><span class="k">Étape 4</span><div><b>Les deux arbres.</b> Niveau du joueur et compétences, ordures dorées et technologies.</div></li>
+    <li><span class="k">Étape 5</span><div><b>Finitions.</b> Planètes, soleil et galaxies réintégrés, équilibrage simulé, sons, test public.</div></li>
+  </ol>
+
+  <h2>À valider avec toi</h2>
+  <div class="q"><b>Les employés ont-ils un salaire ?</b><span class="reco">Ma recommandation : non, seulement un prix d'embauche. Un salaire régulier punit le joueur absent, ce qui va contre l'esprit idle.</span></div>
+  <div class="q"><b>Un petit défi au sol (déchets dangereux, chrono) ?</b><span class="reco">Ma recommandation : rester tranquille, avec seulement des bonus de vitesse. L'ambiance contemplative est ta signature.</span></div>
+  <div class="q"><b>Le style des personnages ?</b><span class="reco">Ma recommandation : des silhouettes simples dessinées par le code, dans le style lumineux de la v2. On pourra les faire dessiner plus tard pour Steam.</span></div>
+
+  <h2>Inspirations</h2>
+  <ul>
+    <li><b>Idle Miner Tycoon</b> : des managers qui automatisent chaque poste, l'argent continue à rentrer quand l'appli est fermée. Le modèle de nos employés.</li>
+    <li><b>Nodebuster</b> : un petit jeu court et très « juteux », 98 % d'avis positifs sur Steam.</li>
+    <li><b>Rusty's Retirement</b> : on automatise petit à petit, 200 000 ventes en quelques semaines.</li>
+  </ul>
+  <p class="muted">Sources : <a href="https://www.steamspy.com/app/3107330">Nodebuster sur SteamSpy</a>, <a href="https://automaton-media.com/articles/newsjp/20240514-293317/">ventes de Rusty's Retirement</a>, <a href="https://adriancrook.com/?p=8095">conception des arbres de compétences</a>.</p>
+
+  <p style="margin-top:28px"><a class="cta" href="https://klyde94.github.io/feed-the-sun/">Jouer à la v2</a></p>
+
+  <footer>Feed the Sun, titre provisoire. Plan préparé par Jarvis pour Klyde.</footer>
+</div>
+</body>
+</html>
