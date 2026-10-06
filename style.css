@@ -115,6 +115,12 @@ p { margin: 0; }
 .buy-btn:disabled { cursor: default; }
 .buy-qty { font: 11px var(--font-data); }
 .buy-cost { font: 600 13px var(--font-data); white-space: nowrap; }
+.fact { font-size: 12px; margin-top: 2px; }
+.fact summary { cursor: pointer; color: var(--sun); font-weight: 600; list-style: none; }
+.fact summary::-webkit-details-marker { display: none; }
+.fact summary::before { content: '+ '; font-family: var(--font-data); }
+.fact[open] summary::before { content: '− '; }
+.fact p { color: var(--mute); margin-top: 4px; }
 .gen-row.is-locked { opacity: 0.5; }
 .gen-row.is-locked .gen-icon { color: var(--mute); }
 
@@ -181,7 +187,8 @@ p { margin: 0; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 
 @media (min-width: 861px) {
-  .toasts { top: 112px; left: 36px; transform: none; width: min(300px, calc(100vw - 520px)); }
+  .toasts { top: auto; bottom: 108px; left: 36px; transform: none; width: min(300px, calc(100vw - 520px)); }
+  .hint { bottom: auto; top: 64px; }
 }
 
 /* ---------- Téléphone et tablette ---------- */

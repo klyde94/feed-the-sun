@@ -71,14 +71,14 @@
 
   /* ---------- Icônes de la flotte ---------- */
   const ICON = {
-    cannon: '<circle cx="9" cy="15" r="5"/><path d="M12 12l8-6"/>',
-    drone: '<circle cx="12" cy="12" r="3.5"/><path d="M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4"/>',
-    shuttle: '<path d="M4 12c3-5 10-5 16 0-6 5-13 5-16 0z"/><path d="M9 12h6"/>',
-    driver: '<path d="M3 17h18M3 13h18"/><path d="M14 6l5 4-5 4"/>',
-    compactor: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
-    elevator: '<path d="M12 2v20"/><rect x="8.5" y="8" width="7" height="6" rx="1"/>',
-    beam: '<path d="M4 20L12 4l8 16"/><path d="M8 13h8"/>',
-    wormhole: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.5"/>',
+    net: '<path d="M4 6l16 0-3 13H7z"/><path d="M8 6l2 13M16 6l-2 13M5.5 11h13M6.5 15.5h11"/>',
+    harpoon: '<path d="M3 21L17 7"/><path d="M14 4h6v6M17 7l3-3"/>',
+    magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h3M15 8h3"/>',
+    arm: '<path d="M4 20l5-8 6-2"/><path d="M15 10l4-4M15 10l5 1"/><circle cx="9" cy="12" r="1.5"/>',
+    tether: '<path d="M12 2v14"/><path d="M8 20h8l-4-4z"/><path d="M9 6c2 1 4 1 6 0M9 10c2 1 4 1 6 0"/>',
+    laser: '<path d="M3 15h7l2 2h-9z"/><path d="M12 15l9-9"/><path d="M18 3l3 3"/>',
+    ion: '<circle cx="6" cy="12" r="3"/><path d="M10 12h2M14 12h2M18 12h2M11 8l2-1M15 8l2-1M11 16l2 1M15 16l2 1"/>',
+    driver: '<path d="M3 19h18M3 15h18"/><path d="M14 6l5 4-5 4"/><rect x="5" y="9" width="5" height="4" rx="1"/>',
   };
   const svg = id => '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICON[id] + '</svg>';
 
@@ -101,7 +101,8 @@
       const r = el('div', 'gen-row');
       r.style.setProperty('--c', g.color);
       r.innerHTML = '<div class="gen-icon">' + svg(g.id) + '</div><div class="gen-main"><div class="gen-top"><span class="gen-name"></span><span class="gen-count"></span></div>' +
-        '<div class="gen-desc"></div><div class="gen-prod"></div><div class="ms"><div class="ms-bar"><div class="ms-fill"></div></div><span class="ms-label"></span></div></div>' +
+        '<div class="gen-desc"></div><div class="gen-prod"></div><div class="ms"><div class="ms-bar"><div class="ms-fill"></div></div><span class="ms-label"></span></div>' +
+        '<details class="fact"><summary></summary><p></p></details></div>' +
         '<button type="button" class="buy-btn"><span class="buy-qty"></span><span class="buy-cost"></span></button>';
       r.querySelector('.buy-btn').onclick = () => { const k = C.buyGen(s, i, s.settings.buy === 'max' ? 'max' : s.settings.buy); if (k) sfx('buy'); refreshFleet(); };
       box.append(r);
@@ -128,6 +129,9 @@
       q('.gen-prod', unlocked ? T('each', { x: fmt(each) }) + (owned ? ' · ' + T('total', { x: fmt(C.genTps(s, i)) }) : '') : '');
       const next = C.nextMilestone(owned), prev = F.MILESTONES.filter(m => m <= owned).pop() || 0;
       r.querySelector('.ms').hidden = !unlocked;
+      r.querySelector('.fact').hidden = !unlocked;
+      q('.fact summary', T('fact'));
+      q('.fact p', N(g.fact));
       r.querySelector('.ms-fill').style.width = next ? Math.min(100, ((owned - prev) / (next - prev)) * 100) + '%' : '100%';
       q('.ms-label', next ? owned + '/' + next + ' → ×' + C.msFactor(s) : T('allMs'));
       let k = s.settings.buy === 'max' ? Math.max(1, C.maxAfford(s, i)) : s.settings.buy;
@@ -359,7 +363,7 @@
   });
   C.on('travel', p => {
     Scene.travel();
-    F.GENS.forEach((g, i) => { if (C.unlockPlanet(i) === p && i >= 2) toast(T('newGen', { gen: N(g.name) }), N(g.desc)); });
+    F.GENS.forEach((g, i) => { if (C.unlockPlanet(i) === p && i >= 2) toast(T('newGen', { gen: N(g.name) }), N(g.fact)); });
     refreshFleet();
   });
   C.on('milestone', e => toast(T('msToast', { gen: N(F.GENS[e.i].name), n: e.count, f: C.msFactor(s) }), '', 'ms'));
@@ -437,6 +441,7 @@
     bindInputs();
     afterLoad();
     if (loaded && !(data && data.save)) awayReturn((Date.now() - s.last) / 1000);
+    if (!loaded) modal(T('introTitle'), [T('introText1'), T('introText2'), T('introText3')], [{ label: T('introGo'), cls: 'btn-sun' }]);
     scheduleWreck(s.wrecks === 0);
     lastTick = Date.now();
     setInterval(tick, 100);
