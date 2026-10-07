@@ -18,6 +18,7 @@
     team: { collector: 0, operator: 0, pilot: 0, gunner: 0 }, teamUps: { trolleys: 0, training: 0 },
     crew: { ground: { xp: 0, lvl: 1 }, orbit: { xp: 0, lvl: 1 } },
     xp: 0, level: 1, skillPts: 0, skills: {}, techPts: 0, tech: {}, goldLife: 0, wrecks: 0, ach: {},
+    picked: 0, dumped: 0, launches: 0, orbitPicked: 0, mission: 0,
     frenzy: 0, awaitingTravel: false, tutorial: 0, seenOrbit: false, playTime: 0, view: 'ground',
     rate: { items: 0, money: 0 }, settings: { lang: null, sound: true }, last: Date.now(),
   });
@@ -93,9 +94,9 @@
     const p = G.PLANETS[n % G.PLANETS.length], c = Math.floor(n / G.PLANETS.length), sfx = c ? ' ' + ['II', 'III', 'IV', 'V', 'VI', 'VII'][Math.min(5, c - 1)] : '';
     return Object.assign({}, p, { bad: p.bad + sfx, good: p.good + sfx });
   };
-  const total = s => G.planetItems(s.planet, 'ground') + G.planetItems(s.planet, 'orbit');
-  const carried = () => { let n = 0; for (const z of ['ground', 'orbit']) for (const a of W.Z[z].agents) n += a.load.length; return n; };
-  W.pollution = s => (s.pools.ground + s.pools.orbit + s.bag.length + s.hold.length + s.cont.ground.length + s.cont.orbit.length + carried()) / total(s);
+  /* La pollution ne compte que le sol : l'orbite est un bonus qui rapporte plus, jamais un blocage. */
+  const carried = () => { let n = 0; for (const a of W.Z.ground.agents) n += a.load.length; return n; };
+  W.pollution = s => (s.pools.ground + s.bag.length + s.cont.ground.length + carried()) / G.planetItems(s.planet, 'ground');
   W.canJump = s => s.savedRun >= G.JUMP_REQ;
   W.jumpGain = s => (s.savedRun * (s.savedRun + 1)) / 2;
   W.jump = s => {
@@ -107,7 +108,7 @@
     return g;
   };
   function checkClean(s) {
-    if (!s.awaitingTravel && s.pools.ground <= 0 && s.pools.orbit <= 0 && W.pollution(s) <= 0) {
+    if (!s.awaitingTravel && s.pools.ground <= 0 && W.pollution(s) <= 0) {
       s.awaitingTravel = true; s.saved++; s.savedRun++; emit('cleaned', s.planet);
     }
   }
@@ -132,11 +133,19 @@
     for (const z of ['ground', 'orbit']) { W.Z[z].items = []; W.Z[z].launching = 0; W.Z[z].agents = []; fill(s, z, true); }
     Object.assign(W.player, { x: 46, y: 84, tx: null, ty: null }); Object.assign(W.ship, { x: 40, y: 42, tx: null, ty: null });
   };
+  W.combo = { n: 0, t: -9 };
   function take(s, z, it, who) {
     const zz = W.Z[z]; zz.items.splice(zz.items.indexOf(it), 1); s.pools[z]--;
+    const key = it.kind + (it.gold ? '*' : '');
     if (it.gold) { const n = Math.random() < 0.15 ? 3 : 1; s.techPts += n; s.goldLife++; emit('gold', { n, who, z }); }
-    emit('pickup', { it, who, z });
-    return it.kind + (it.gold ? '*' : '');
+    let cash = 0;
+    if (who === 'me') {
+      W.combo.n = s.playTime - W.combo.t <= G.COMBO_WINDOW ? Math.min(G.COMBO_MAX, W.combo.n + 1) : 1; W.combo.t = s.playTime;
+      cash = W.itemValue(s, z, key) * G.COMBO_CASH * W.combo.n; s.money += cash; s.moneyLife += cash;
+      if (z === 'ground') s.picked++; else s.orbitPicked++;
+    }
+    emit('pickup', { it, who, z, cash, combo: who === 'me' ? W.combo.n : 0 });
+    return key;
   }
 
   /* ---------- Commandes ---------- */
@@ -148,7 +157,7 @@
     const zz = W.Z[z], cont = s.cont[z];
     if (!cont.length || zz.launching > 0) return false;
     const n = cont.length, full = n >= W.contCap(s, z), money = W.contValue(s, z), kinds = cont.slice(0, 12);
-    s.money += money; s.moneyLife += money; s.sent += n; s.cont[z] = [];
+    s.money += money; s.moneyLife += money; s.sent += n; s.launches++; s.cont[z] = [];
     zz.launching = W.launchTime(s);
     if (auto) { acc.items += n; acc.money += money; }
     gainXp(s, n);
@@ -182,10 +191,11 @@
       m.walk = (m.walk || 0) + dt * speed * 0.35;
     }
   }
-  function collect(s, z, m, load, cap, reach, who) {
-    const items = W.Z[z].items;
+  function collect(s, z, m, load, cap, reach, who, dt) {
+    const items = W.Z[z].items, yk = z === 'ground' ? 1.6 : 1;
     for (let i = items.length - 1; i >= 0 && load.length < cap; i--) {
-      const it = items[i];
+      const it = items[i], dx = m.x - it.x, dy = m.y - it.y, d = Math.hypot(dx, dy * yk);
+      if (dt && d > reach && d <= reach * G.PULL) { const step = Math.min(d - reach * 0.6, 45 * dt) / d; it.x += dx * step; it.y += dy * step; it.pulled = true; }
       if (Math.hypot(it.x - m.x, (it.y - m.y) * (z === 'ground' ? 1.6 : 1)) <= reach) { if (it.claim) it.claim.target = null; load.push(take(s, z, it, who)); if (load.length >= cap && who === 'me') emit('full', z); }
     }
   }
@@ -195,7 +205,7 @@
     zz.dump -= dt;
     let moved = false;
     while (zz.dump <= 0 && load.length && s.cont[z].length < cap) {
-      s.cont[z].push(load.pop()); zz.dump += who === 'me' ? 0.06 : 0.02; moved = true;
+      s.cont[z].push(load.pop()); zz.dump += who === 'me' ? 0.05 : 0.02; moved = true; if (who === 'me') s.dumped++;
       emit('dump', { z, who });
       if (s.cont[z].length >= cap) emit('contFull', z);
     }
@@ -241,11 +251,11 @@
     for (const z of ['ground', 'orbit']) if (W.Z[z].launching > 0) W.Z[z].launching = Math.max(0, W.Z[z].launching - dt);
     const gc = G.ZONES.ground, oc = G.ZONES.orbit;
     steer(W.player, W.walkSpeed(s), dt, gc, s.view === 'ground', 0.6);
-    collect(s, 'ground', W.player, s.bag, W.bagCap(s), W.reach(s), 'me');
+    collect(s, 'ground', W.player, s.bag, W.bagCap(s), W.reach(s), 'me', dt);
     if (Math.abs(W.player.x - gc.base) < 7) dumpInto(s, 'ground', s.bag, dt, 'me');
     if (s.ship) {
       steer(W.ship, W.shipSpeed(s), dt, oc, s.view === 'orbit', 1);
-      collect(s, 'orbit', W.ship, s.hold, W.holdCap(s), W.shipReach(s), 'me');
+      collect(s, 'orbit', W.ship, s.hold, W.holdCap(s), W.shipReach(s), 'me', dt);
       if (Math.hypot(W.ship.x - oc.base, W.ship.y - oc.baseY) < 9) dumpInto(s, 'orbit', s.hold, dt, 'me');
     }
     for (const z of ['ground', 'orbit']) {
@@ -256,24 +266,34 @@
       if (op && cont && (cont >= Math.ceil(cap * (sk(s, 'proDriver') ? 0.5 : 1)) || idle)) W.launch(s, z, true);
     }
     acc.t += dt;
+    if (W.combo.n && s.playTime - W.combo.t > G.COMBO_WINDOW) { W.combo.n = 0; emit('comboEnd'); }
+    W.checkMission(s);
     if (acc.t >= 5) { s.rate.items = s.rate.items * 0.7 + 0.3 * acc.items / acc.t; s.rate.money = s.rate.money * 0.7 + 0.3 * acc.money / acc.t; acc = { items: 0, money: 0, t: 0 }; }
     checkClean(s);
   };
 
   /* ---------- Hors ligne : l'équipe continue au rythme mesuré ---------- */
   W.offline = (s, secs) => {
-    const t = Math.min(secs, W.offlineCap(s)), poolsLeft = s.pools.ground + s.pools.orbit;
+    const t = Math.min(secs, W.offlineCap(s)), poolsLeft = s.pools.ground + (s.ship ? s.pools.orbit : 0);
     if (!(s.rate.items > 0) || !poolsLeft || s.awaitingTravel) return null;
     const n = Math.min(Math.floor(s.rate.items * t), poolsLeft), money = Math.round(n * s.rate.money / s.rate.items);
     const g = Math.round(n * s.pools.ground / poolsLeft);
     s.pools.ground -= g; s.pools.orbit -= n - g;
     s.money += money; s.moneyLife += money; s.sent += n; gainXp(s, n);
     for (const z of ['ground', 'orbit']) { W.Z[z].items = []; fill(s, z, false); }
-    const stop = s.pools.ground + s.pools.orbit <= 0;
-    if (stop) { s.cont.ground = []; s.cont.orbit = []; s.bag = []; s.hold = []; checkClean(s); }
+    const stop = s.pools.ground <= 0;
+    if (stop) { s.cont.ground = []; s.bag = []; checkClean(s); }
     return { secs, n, money, stop };
   };
 
+  W.mission = s => { const m = G.MISSIONS[s.mission]; return m ? { id: m.id, val: Math.min(m.need, m.val(s)), need: m.need, cash: Math.round(m.cash * G.planetValue(s.planet)) } : null; };
+  W.checkMission = s => {
+    const m = G.MISSIONS[s.mission];
+    if (!m || m.val(s) < m.need) return;
+    const cash = Math.round(m.cash * G.planetValue(s.planet));
+    s.money += cash; s.moneyLife += cash; s.mission++;
+    emit('mission', { id: m.id, cash });
+  };
   W.checkAch = s => { for (const a of G.ACHIEVEMENTS) if (!s.ach[a.id] && a.ok(s)) { s.ach[a.id] = Date.now(); emit('ach', a.id); } };
 
   /* ---------- Sauvegarde ---------- */

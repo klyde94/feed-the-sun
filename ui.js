@@ -1,454 +1,226 @@
 'use strict';
-/* Feed the Sun — interface : panneaux, entrées, sons, sauvegarde, démarrage. */
+/* Feed the Sun v3 — interface principale : affichage, commandes, sons, événements, sauvegarde, installation, démarrage. */
 (function () {
-  const F = window.FTS, C = F.C, Scene = F.Scene;
+  const G = window.FTS3, Wd = G.W, R = G.R, O = G.O, P = G.P;
   const $ = id => document.getElementById(id);
-  const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-  let s = null, lang = 'fr', tab = 'fleet';
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  let s = null, lang = 'fr', tab = 'shop', deferredInstall = null;
 
   /* ---------- Textes et nombres ---------- */
-  const T = (k, v) => { let str = (F.I18N[lang] && F.I18N[lang][k]) || F.I18N.fr[k] || k; if (v) for (const x in v) str = str.split('{' + x + '}').join(v[x]); return str; };
-  const N = o => o[lang] || o.fr;
-  const SUF = { fr: ['', 'k', 'M', 'Md', 'Bn', 'Bd', 'Tn', 'Td', 'Qn', 'Qd'], en: ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'] };
+  const T = (k, v) => { let str = G.I18N[lang][k]; if (str == null) str = G.I18N.fr[k]; if (str == null) str = k; if (v) for (const x in v) str = String(str).split('{' + x + '}').join(v[x]); return str; };
+  const SUF = { fr: ['', 'k', 'M', 'Md', 'Bn', 'Bd', 'Tn'], en: ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi'] };
   const loc = str => (lang === 'fr' ? str.replace('.', ',') : str);
-  function fmt(n) {
-    if (!Number.isFinite(n)) return '∞';
-    if (n < 0) return '-' + fmt(-n);
-    if (n < 1000) return loc(n >= 100 || n === Math.floor(n) ? String(Math.floor(n)) : n.toFixed(n < 10 ? 2 : 1));
+  const fmt = n => {
+    n = Math.max(0, n);
     if (n < 1e4) return Math.floor(n).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US');
-    const e = Math.floor(Math.log10(n) / 3), suf = SUF[lang];
-    if (e >= suf.length) return loc(n.toExponential(2).replace('e+', 'e'));
-    const v = n / Math.pow(1000, e);
-    return loc(v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)) + ' ' + suf[e];
-  }
-  function fmtTime(sec) {
-    sec = Math.floor(sec);
-    const d = Math.floor(sec / 86400), h = Math.floor(sec / 3600) % 24, m = Math.floor(sec / 60) % 60, x = sec % 60;
-    if (d) return d + ' ' + T('d') + ' ' + h + ' ' + T('h');
-    if (h) return h + ' ' + T('h') + ' ' + m + ' ' + T('min');
-    if (m) return m + ' ' + T('min') + ' ' + x + ' ' + T('s');
-    return x + ' ' + T('s');
-  }
-  const kelvin = k => (lang === 'fr' ? k.toLocaleString('fr-FR') : k.toLocaleString('en-US'));
+    const e = Math.min(6, Math.floor(Math.log10(n) / 3)), v = n / Math.pow(1000, e);
+    return loc(v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)) + ' ' + SUF[lang][e];
+  };
+  const fmtNum = v => loc(String(Math.round(v * 100) / 100));
+  const fmtTime = sec => { sec = Math.floor(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, x = sec % 60; return h ? h + ' ' + T('h') + ' ' + m + ' ' + T('min') : m ? m + ' ' + T('min') + ' ' + x + ' ' + T('s') : x + ' ' + T('s'); };
+  const roman = n => ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n - 1] || String(n);
+  const A = id => (G.I18N[lang].ach[id] || G.I18N.fr.ach[id]);
 
-  /* ---------- Son (synthétisé, aucun fichier) ---------- */
-  let ac = null;
+  /* ---------- Sons synthétisés ---------- */
+  let ac = null, lastSfx = {};
   function sfx(type) {
     if (!s || !s.settings.sound) return;
+    const now = performance.now(); if (now - (lastSfx[type] || 0) < 60) return; lastSfx[type] = now;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const p = { pickup: [600, 900, 0.07, 0.03, 'sine'], dump: [220, 160, 0.06, 0.035, 'triangle'], launch: [120, 520, 0.7, 0.05, 'sawtooth'], buy: [520, 780, 0.09, 0.04, 'sine'],
+        full: [440, 330, 0.18, 0.035, 'square'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.06, 'sine'], gold: [880, 1320, 0.25, 0.05, 'sine'], combo: [700, 1100, 0.08, 0.035, 'sine'],
+        level: [440, 880, 0.5, 0.06, 'triangle'], learn: [660, 990, 0.3, 0.05, 'sine'], hire: [392, 523, 0.25, 0.05, 'triangle'], wreck: [990, 1480, 0.3, 0.05, 'sine'] }[type];
+      if (!p) return;
       const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
-      const P = { shot: [180, 70, 0.12, 0.06, 'triangle'], buy: [520, 780, 0.08, 0.04, 'sine'], ach: [660, 990, 0.35, 0.06, 'sine'],
-        wreck: [880, 1320, 0.3, 0.05, 'sine'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.07, 'sine'], jump: [90, 900, 1.6, 0.06, 'sawtooth'] }[type];
-      if (!P) return;
-      o.type = P[4]; o.frequency.setValueAtTime(P[0], t); o.frequency.exponentialRampToValueAtTime(P[1], t + P[2]);
-      g.gain.setValueAtTime(P[3], t); g.gain.exponentialRampToValueAtTime(0.0001, t + P[2]);
-      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + P[2] + 0.02);
+      o.type = p[4]; o.frequency.setValueAtTime(p[0], t); o.frequency.exponentialRampToValueAtTime(p[1], t + p[2]);
+      g.gain.setValueAtTime(p[3], t); g.gain.exponentialRampToValueAtTime(0.0001, t + p[2]);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + p[2] + 0.02);
     } catch (e) { /* audio indisponible */ }
   }
 
-  /* ---------- Toasts et fenêtre modale ---------- */
+  /* ---------- Toasts et fenêtre ---------- */
   function toast(title, text, kind) {
     const box = $('toasts');
-    while (box.children.length >= 4) box.firstChild.remove();
-    const t = el('div', 'toast' + (kind ? ' toast-' + kind : ''));
-    t.append(el('div', 'toast-title'), el('div', 'toast-text'));
-    t.firstChild.textContent = title; t.lastChild.textContent = text || '';
-    box.append(t);
-    setTimeout(() => t.classList.add('out'), 4200);
-    setTimeout(() => t.remove(), 4800);
+    while (box.children.length >= 3) box.firstChild.remove();
+    const t = el('div', 'toast' + (kind ? ' toast-' + kind : '')); t.append(el('div', 'toast-title', title), el('div', 'toast-text', text || ''));
+    box.append(t); setTimeout(() => t.classList.add('out'), 3200); setTimeout(() => t.remove(), 3800);
   }
-  function modal(title, body, actions) {
+  function modal(title, lines, actions) {
     $('modalTitle').textContent = title;
-    const b = $('modalBody'); b.innerHTML = '';
-    (Array.isArray(body) ? body : [body]).forEach(p => { const e = el('p'); e.textContent = p; b.append(e); });
+    const b = $('modalBody'); b.innerHTML = ''; lines.forEach(p => b.append(el('p', null, p)));
     const a = $('modalActions'); a.innerHTML = '';
-    actions.forEach(x => { const btn = el('button', 'btn ' + (x.cls || '')); btn.type = 'button'; btn.textContent = x.label; btn.onclick = () => { closeModal(); if (x.fn) x.fn(); }; a.append(btn); });
-    $('modal').hidden = false;
-    const first = a.querySelector('button'); if (first) first.focus();
-  }
-  const closeModal = () => { $('modal').hidden = true; };
-
-  /* ---------- Icônes de la flotte ---------- */
-  const ICON = {
-    net: '<path d="M4 6l16 0-3 13H7z"/><path d="M8 6l2 13M16 6l-2 13M5.5 11h13M6.5 15.5h11"/>',
-    harpoon: '<path d="M3 21L17 7"/><path d="M14 4h6v6M17 7l3-3"/>',
-    magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h3M15 8h3"/>',
-    arm: '<path d="M4 20l5-8 6-2"/><path d="M15 10l4-4M15 10l5 1"/><circle cx="9" cy="12" r="1.5"/>',
-    tether: '<path d="M12 2v14"/><path d="M8 20h8l-4-4z"/><path d="M9 6c2 1 4 1 6 0M9 10c2 1 4 1 6 0"/>',
-    laser: '<path d="M3 15h7l2 2h-9z"/><path d="M12 15l9-9"/><path d="M18 3l3 3"/>',
-    ion: '<circle cx="6" cy="12" r="3"/><path d="M10 12h2M14 12h2M18 12h2M11 8l2-1M15 8l2-1M11 16l2 1M15 16l2 1"/>',
-    driver: '<path d="M3 19h18M3 15h18"/><path d="M14 6l5 4-5 4"/><rect x="5" y="9" width="5" height="4" rx="1"/>',
-  };
-  const svg = id => '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICON[id] + '</svg>';
-
-  /* ---------- Onglet Flotte ---------- */
-  const rows = [];
-  function buildFleet() {
-    const box = $('tab-fleet'); box.innerHTML = '';
-    const head = el('div', 'fleet-head');
-    const seg = el('div', 'seg'); seg.setAttribute('role', 'group');
-    [1, 10, 100, 'max'].forEach(m => {
-      const b = el('button', 'seg-btn'); b.type = 'button'; b.dataset.mode = m;
-      b.textContent = m === 'max' ? T('max') : '×' + m;
-      b.onclick = () => { s.settings.buy = m; refreshFleet(); };
-      seg.append(b);
-    });
-    head.append(el('span', 'fleet-label', T('buy')), seg);
-    box.append(head);
-    rows.length = 0;
-    F.GENS.forEach((g, i) => {
-      const r = el('div', 'gen-row');
-      r.style.setProperty('--c', g.color);
-      r.innerHTML = '<div class="gen-icon">' + svg(g.id) + '</div><div class="gen-main"><div class="gen-top"><span class="gen-name"></span><span class="gen-count"></span></div>' +
-        '<div class="gen-desc"></div><div class="gen-prod"></div><div class="ms"><div class="ms-bar"><div class="ms-fill"></div></div><span class="ms-label"></span></div>' +
-        '<details class="fact"><summary></summary><p></p></details></div>' +
-        '<button type="button" class="buy-btn"><span class="buy-qty"></span><span class="buy-cost"></span></button>';
-      r.querySelector('.buy-btn').onclick = () => { const k = C.buyGen(s, i, s.settings.buy === 'max' ? 'max' : s.settings.buy); if (k) sfx('buy'); refreshFleet(); };
-      box.append(r);
-      rows.push(r);
-    });
-    refreshFleet();
-  }
-  function refreshFleet() {
-    if (!rows.length) return;
-    document.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('is-on', String(s.settings.buy) === b.dataset.mode));
-    let shownLocked = false;
-    F.GENS.forEach((g, i) => {
-      const r = rows[i], unlocked = C.genUnlocked(s, i), owned = s.gens[i];
-      const visible = unlocked || owned > 0 || (!shownLocked && (i === 0 || s.gens[i - 1] > 0 || s.planet >= C.unlockPlanet(i) - 1));
-      r.hidden = !visible;
-      if (!visible) return;
-      if (!unlocked) shownLocked = true;
-      r.classList.toggle('is-locked', !unlocked);
-      const q = (sel, txt) => { const e = r.querySelector(sel); if (e.textContent !== txt) e.textContent = txt; };
-      q('.gen-name', unlocked ? N(g.name) : '???');
-      q('.gen-count', owned ? String(owned) : '');
-      q('.gen-desc', unlocked ? N(g.desc) : (s.planet < C.unlockPlanet(i) ? T('lockedGen', { n: C.unlockPlanet(i) + 1 }) : T('lockedPrev', { prev: N(F.GENS[i - 1].name) })));
-      const each = F.GENS[i].prod * C.genMult(s, i) * C.prodMult(s);
-      q('.gen-prod', unlocked ? T('each', { x: fmt(each) }) + (owned ? ' · ' + T('total', { x: fmt(C.genTps(s, i)) }) : '') : '');
-      const next = C.nextMilestone(owned), prev = F.MILESTONES.filter(m => m <= owned).pop() || 0;
-      r.querySelector('.ms').hidden = !unlocked;
-      r.querySelector('.fact').hidden = !unlocked;
-      q('.fact summary', T('fact'));
-      q('.fact p', N(g.fact));
-      r.querySelector('.ms-fill').style.width = next ? Math.min(100, ((owned - prev) / (next - prev)) * 100) + '%' : '100%';
-      q('.ms-label', next ? owned + '/' + next + ' → ×' + C.msFactor(s) : T('allMs'));
-      let k = s.settings.buy === 'max' ? Math.max(1, C.maxAfford(s, i)) : s.settings.buy;
-      const cost = C.bulkCost(s, i, k), btn = r.querySelector('.buy-btn');
-      btn.disabled = !unlocked;
-      btn.classList.toggle('can', unlocked && cost <= s.credits);
-      q('.buy-qty', '×' + k);
-      q('.buy-cost', fmt(cost) + ' cr');
-    });
+    actions.forEach(x => { const btn = el('button', 'btn ' + (x.cls || ''), x.label); btn.type = 'button'; btn.onclick = () => { $('modal').hidden = true; if (x.fn) x.fn(); }; a.append(btn); });
+    $('modal').hidden = false; const f = a.querySelector('button'); if (f) f.focus();
   }
 
-  /* ---------- Onglet Améliorations ---------- */
-  let upsSig = '';
-  function upName(u) { return u.kind === 'gen' ? T('upGenName', { gen: N(F.GENS[u.gen].name), mk: F.MK[u.tier] }) : N(u.name); }
-  function upDesc(u) { return u.kind === 'gen' ? T('upGen', { gen: N(F.GENS[u.gen].name) }) : N(u.desc); }
-  function refreshUps(force) {
-    const list = C.availableUps(s), sig = list.map(u => u.id).join(',') + lang;
-    $('upsDot').hidden = !list.some(u => u.cost <= s.credits);
-    if (tab !== 'ups') return;
-    const box = $('tab-ups');
-    if (force || sig !== upsSig) {
-      upsSig = sig; box.innerHTML = '';
-      const head = el('div', 'ups-head');
-      const all = el('button', 'btn btn-ghost'); all.type = 'button'; all.textContent = T('buyAll');
-      all.onclick = () => { let n = 0; for (const u of C.availableUps(s)) if (C.buyUp(s, u.id)) n++; if (n) sfx('buy'); refreshUps(true); };
-      head.append(el('span', 'ups-count', T('upsOwned', { n: Object.keys(s.ups).length })), all);
-      box.append(head);
-      if (!list.length) box.append(el('p', 'empty', T('noUps')));
-      const grid = el('div', 'up-grid');
-      list.forEach(u => {
-        const c = el('button', 'up-card'); c.type = 'button'; c.dataset.id = u.id;
-        if (u.kind === 'gen') c.style.setProperty('--c', F.GENS[u.gen].color);
-        c.append(el('span', 'up-name'), el('span', 'up-desc'), el('span', 'up-cost'));
-        c.children[0].textContent = upName(u); c.children[1].textContent = upDesc(u); c.children[2].textContent = fmt(u.cost) + ' cr';
-        c.onclick = () => { if (C.buyUp(s, u.id)) { sfx('buy'); refreshUps(true); } };
-        grid.append(c);
-      });
-      box.append(grid);
-    }
-    box.querySelectorAll('.up-card').forEach(c => c.classList.toggle('can', C.upById(c.dataset.id).cost <= s.credits));
-  }
+  /* ---------- Installation (application) ---------- */
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (tab === 'opt') P.render(true); });
+  const canInstall = () => !!deferredInstall;
+  const install = () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(() => { deferredInstall = null; P.render(true); }); };
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-  /* ---------- Onglet Galaxie ---------- */
-  let galSig = '';
-  function refreshGalaxy(force) {
-    $('galaxyDot').hidden = !C.canJump(s);
-    if (tab !== 'galaxy') return;
-    const sig = [s.crystals, s.crystalsLife, s.cleanedRun, Object.keys(s.relics).join(), s.settings.autoGens, s.settings.autoUps, lang].join('|');
-    if (!force && sig === galSig) return;
-    galSig = sig;
-    const box = $('tab-galaxy'); box.innerHTML = '';
-    const sum = el('div', 'gal-summary');
-    sum.innerHTML = '<div class="stat-big"></div><div class="stat-label"></div><div class="stat-sub"></div>';
-    sum.children[0].textContent = fmt(s.crystals); sum.children[1].textContent = T('crystals');
-    sum.children[2].textContent = T('crystalBonus', { p: fmt(s.crystalsLife * F.CRYSTAL_BONUS * 100) });
-    box.append(sum);
-    const j = el('section', 'jump-box');
-    j.append(el('h3', null, T('jumpTitle')), el('p', null, T('jumpDesc')));
-    if (C.canJump(s)) {
-      j.append(el('p', 'jump-gain', T('jumpGain', { n: fmt(C.jumpGain(s)) })), el('p', 'muted', T('jumpRule')));
-      const b = el('button', 'btn btn-sun'); b.type = 'button'; b.textContent = T('jumpBtn', { g: C.roman(s.jumps + 2) });
-      b.onclick = () => modal(T('confirmJumpTitle', { g: C.roman(s.jumps + 2) }), T('confirmJumpText', { n: fmt(C.jumpGain(s)) }),
-        [{ label: T('jumpGo'), cls: 'btn-sun', fn: () => { C.jump(s); C.save(s); } }, { label: T('cancel'), cls: 'btn-ghost' }]);
-      j.append(b);
-    } else {
-      j.append(el('p', 'muted', T('jumpLocked', { n: F.JUMP_REQ, c: s.cleanedRun })));
-      const bar = el('div', 'bar'); const fill = el('div', 'bar-fill'); fill.style.width = (s.cleanedRun / F.JUMP_REQ) * 100 + '%'; bar.append(fill); j.append(bar);
-    }
-    box.append(j);
-    const rel = el('section', 'relics');
-    rel.append(el('h3', null, T('relicsTitle')), el('p', 'muted', T('relicsDesc')));
-    F.RELICS.forEach(r => {
-      const own = !!s.relics[r.id], row = el('div', 'relic' + (own ? ' owned' : ''));
-      row.append(el('div', 'relic-main'));
-      row.firstChild.append(el('div', 'relic-name'), el('div', 'relic-desc'));
-      row.firstChild.children[0].textContent = N(r.name); row.firstChild.children[1].textContent = N(r.desc);
-      if (own) {
-        const tag = el('span', 'relic-tag'); tag.textContent = T('owned'); row.append(tag);
-        const key = r.id === 'factory' ? 'autoGens' : r.id === 'office' ? 'autoUps' : null;
-        if (key) {
-          const lab = el('label', 'toggle'), cb = el('input'); cb.type = 'checkbox'; cb.id = 'tg-' + key; cb.checked = !!s.settings[key];
-          cb.onchange = () => { s.settings[key] = cb.checked; }; lab.append(cb, document.createTextNode(T(key))); row.firstChild.append(lab);
-        }
-      } else {
-        const b = el('button', 'btn btn-ghost' + (s.crystals >= r.cost ? ' can' : '')); b.type = 'button'; b.textContent = T('cost', { n: r.cost });
-        b.disabled = s.crystals < r.cost; b.onclick = () => { if (C.buyRelic(s, r.id)) { sfx('ach'); refreshGalaxy(true); } };
-        row.append(b);
-      }
-      rel.append(row);
-    });
-    box.append(rel);
-  }
+  G.U = { T, fmt, fmtNum, fmtTime, roman, A, sfx, toast, modal, state: () => s, tab: () => tab, lang: () => lang, setLang: k => setLang(k), canInstall, install, reset: () => { Wd.wipe(); s = Wd.fresh(); s.settings.lang = lang; Wd.reset(s); afterLoad(); } };
 
-  /* ---------- Onglet Succès ---------- */
-  let achSig = '';
-  function refreshAch(force) {
-    if (tab !== 'ach') return;
-    const sig = C.achCount(s) + lang;
-    if (!force && sig === achSig) return;
-    achSig = sig;
-    const box = $('tab-ach'); box.innerHTML = '';
-    box.append(el('p', 'ach-head', T('achHead', { n: C.achCount(s), m: F.ACHIEVEMENTS.length, p: C.achCount(s) * F.ACH_BONUS * 100 })));
-    const grid = el('div', 'ach-grid');
-    F.ACHIEVEMENTS.forEach(a => {
-      const c = el('div', 'ach' + (s.ach[a.id] ? ' got' : ''));
-      c.append(el('div', 'ach-name'), el('div', 'ach-desc'));
-      c.children[0].textContent = N(a.name); c.children[1].textContent = N(a.desc);
-      grid.append(c);
-    });
-    box.append(grid);
-  }
-
-  /* ---------- Onglet Options ---------- */
-  function buildOptions() {
-    const box = $('tab-opt'); box.innerHTML = '';
-    const sec = (title) => { const x = el('section', 'opt-section'); x.append(el('h3', null, title)); box.append(x); return x; };
-    const a = sec(T('lang')), row = el('div', 'seg');
-    [['fr', 'Français'], ['en', 'English']].forEach(([k, label]) => {
-      const b = el('button', 'seg-btn' + (lang === k ? ' is-on' : '')); b.type = 'button'; b.textContent = label;
-      b.onclick = () => { setLang(k); }; row.append(b);
-    });
-    a.append(row);
-    const b = sec(T('sound')), snd = el('button', 'btn btn-ghost'); snd.type = 'button';
-    snd.textContent = s.settings.sound ? T('on') : T('off');
-    snd.onclick = () => { s.settings.sound = !s.settings.sound; buildOptions(); };
-    b.append(snd);
-    const c = sec(T('exportTitle'));
-    c.append(el('p', 'muted', T('saveNote')));
-    const ex = el('button', 'btn btn-ghost'); ex.type = 'button'; ex.textContent = T('exportBtn');
-    const ta = el('textarea', 'save-box'); ta.id = 'saveCode'; ta.rows = 3; ta.setAttribute('aria-label', T('importLabel')); ta.placeholder = T('importLabel');
-    ex.onclick = () => {
-      const code = C.exportSave(s); ta.value = code;
-      const fallback = () => { ta.focus(); ta.select(); toast(T('copyFail')); };
-      try { navigator.clipboard.writeText(code).then(() => toast(T('copied')), fallback); } catch (e) { fallback(); }
-    };
-    const im = el('button', 'btn btn-ghost'); im.type = 'button'; im.textContent = T('importBtn');
-    im.onclick = () => { const ns = C.importSave(ta.value); if (!ns) { toast(T('importErr')); return; } s = ns; afterLoad(); C.save(s); toast(T('imported')); };
-    const btns = el('div', 'btn-row'); btns.append(ex, im);
-    c.append(btns, ta);
-    const d = sec(T('stats')), dl = el('dl', 'stats'); dl.id = 'statsList'; d.append(dl);
-    const e = sec(T('resetTitle')), rb = el('button', 'btn btn-danger'); rb.type = 'button'; rb.textContent = T('resetBtn');
-    rb.onclick = () => modal(T('resetConfirm'), T('resetText'), [{ label: T('resetGo'), cls: 'btn-danger', fn: () => { C.wipe(); s = C.fresh(); s.settings.lang = lang; afterLoad(); C.save(s); } }, { label: T('cancel'), cls: 'btn-ghost' }]);
-    e.append(rb);
-    refreshStats();
-  }
-  function refreshStats() {
-    const dl = $('statsList'); if (!dl || tab !== 'opt') return;
-    const st = F.SUN[C.sunStage(s)];
-    const items = [[T('stTime'), fmtTime(s.playTime)], [T('stShots'), fmt(s.shots)], [T('stTons'), fmt(s.tonnesLife) + ' t'], [T('stPlanets'), fmt(s.cleanedLife)],
-      [T('stWrecks'), fmt(s.wrecks)], [T('stJumps'), fmt(s.jumps)], [T('stSun'), N(st.name)]];
-    dl.innerHTML = '';
-    items.forEach(([k, v]) => { const dt = el('dt'), dd = el('dd'); dt.textContent = k; dd.textContent = v; dl.append(dt, dd); });
-  }
-
-  /* ---------- Onglets, langue ---------- */
+  /* ---------- Onglets, langue, vue ---------- */
   function showTab(name) {
     tab = name;
     document.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', on); });
-    ['fleet', 'ups', 'galaxy', 'ach', 'opt'].forEach(n => { $('tab-' + n).hidden = n !== name; });
-    if (name === 'ups') refreshUps(true);
-    if (name === 'galaxy') refreshGalaxy(true);
-    if (name === 'ach') refreshAch(true);
-    if (name === 'opt') buildOptions();
-    try { localStorage.setItem('feedthesun.tab', name); } catch (e) { /* stockage indisponible */ }
+    ['shop', 'trees', 'galaxy', 'opt'].forEach(n => { $('tab-' + n).hidden = n !== name; });
+    P.render(true);
+    try { localStorage.setItem('feedthesun.v3.tab', name); } catch (e) { /* stockage indisponible */ }
   }
   function setLang(k) {
     lang = k; s.settings.lang = k; document.documentElement.lang = k;
     document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = T(e.dataset.i18n); });
-    buildFleet(); showTab(tab); hud(true);
+    showTab(tab);
+  }
+  function setView(v) {
+    if (v === 'orbit' && !s.ship) return;
+    s.view = v; Wd.input.x = Wd.input.y = 0;
+    if (v === 'orbit' && !s.seenOrbit) { s.seenOrbit = true; toast(T('orbit'), T('hintOrbit')); }
   }
 
-  /* ---------- Affichage principal ---------- */
-  let lastStage = -1, hintTimer = 0;
+  /* ---------- Affichage ---------- */
+  let lastStage = -1;
   function hud() {
-    $('credits').textContent = fmt(s.credits);
-    $('cps').textContent = fmt(C.cps(s));
-    $('tps').textContent = fmt(s.awaitingTravel ? 0 : C.tps(s));
-    const info = C.planetInfo(s), total = C.pollution(s.planet);
+    const z = s.view, info = Wd.planetInfo(s);
+    $('money').textContent = fmt(s.money);
+    $('lvlRow').hidden = $('xpRow').hidden = s.level < 2;
+    $('lvlTxt').textContent = T('level', { n: s.level }); $('xpBar').style.width = Math.min(100, (s.xp / G.xpNeed(s.level)) * 100) + '%';
+    $('ptsTxt').textContent = (s.skillPts ? '✦ ' + s.skillPts + '  ' : '') + (s.techPts ? '★ ' + s.techPts : '');
+    const m = Wd.mission(s);
+    $('missionText').textContent = m ? T('mission.' + m.id, { n: m.need }) + (m.need > 1 ? ' · ' + m.val + '/' + m.need : '') : T('missionAll');
+    $('missionReward').textContent = m && m.cash ? '+' + fmt(m.cash) + ' $' : '';
+    $('missionBar').style.width = (m ? (m.val / m.need) * 100 : 100) + '%';
     $('planetName').textContent = s.awaitingTravel ? info.good : info.bad;
-    $('planetMeta').textContent = T('planetN', { n: s.planet + 1 }) + ' · ' + T('galaxyN', { g: C.roman(s.jumps + 1) });
-    const stage = C.sunStage(s), sd = F.SUN[stage];
-    $('sunMeta').textContent = N(sd.name) + (sd.k ? ' · ' + kelvin(sd.k) + ' K' : '');
-    const pct = s.awaitingTravel ? 0 : (s.planetLeft / total) * 100;
-    $('pollPct').textContent = (pct > 0 && pct < 1 ? loc(pct.toFixed(1)) : Math.ceil(pct)) + ' %';
-    $('pollBar').style.width = pct + '%';
-    $('pollSub').textContent = T('tonsLeft', { t: fmt(s.planetLeft) }) + ' · ' + T('perTon', { v: fmt(C.value(s)) });
-    const c = Scene.sunColor();
-    document.documentElement.style.setProperty('--sun', 'rgb(' + c.join(',') + ')');
-    $('fireBtn').disabled = s.awaitingTravel;
-    if (lastStage >= 0 && stage > lastStage) {
-      toast(T('sunToast'), sd.k ? T('sunToastText', { name: N(sd.name), k: kelvin(sd.k) }) : T('sunToastPrism', { name: N(sd.name) }), 'sun');
-      Scene.sunUp(); sfx('sun');
-    }
+    $('planetMeta').textContent = T('planetN', { n: s.planet + 1 }) + (s.jumps ? ' · ' + T('galaxyN', { g: roman(s.jumps + 1) }) : '');
+    const stage = Wd.sunStage(s), sd = G.SUN[stage], poll = Wd.pollution(s) * 100;
+    $('sunMeta').textContent = G.I18N[lang].sun[stage] + ' · ' + sd.k.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') + ' K';
+    if (lastStage >= 0 && stage > lastStage) { toast(T('sunToast'), G.I18N[lang].sun[stage], 'sun'); R.fxSunUp(); O.fxSunUp(); sfx('sun'); }
     lastStage = stage;
-    const bf = $('buffs');
-    bf.innerHTML = '';
-    s.buffs.forEach(b => {
-      const x = el('div', 'buff'); x.textContent = T(b.type === 'frenzy' ? 'buffFrenzy' : 'buffOverdrive') + ' · ' + Math.ceil(b.left) + ' s';
-      x.style.setProperty('--p', (b.left / b.total) * 100 + '%'); bf.append(x);
-    });
-    banner();
-    hints();
-  }
-  function banner() {
-    const show = s.awaitingTravel;
-    $('banner').hidden = !show;
-    if (!show) return;
-    const now = C.planetInfo(s), next = C.planetInfo(s, s.planet + 1);
-    $('bannerTitle').textContent = T('cleanTitle', { name: now.good });
-    $('bannerText').textContent = T('cleanText', { old: now.bad, next: next.bad });
-    $('travelBtn').textContent = C.relic(s, 'autopilot') ? T('travelAuto', { next: next.bad }) : T('travel', { next: next.bad });
-  }
-  function hints() {
-    const h = $('hint');
-    let key = null;
-    if (Scene.hasWreck() && s.wrecks === 0) key = 'hintWreck';
-    else if (s.tutorial === 0) { key = 'hint0'; if (s.shots >= 3) s.tutorial = 1; }
-    else if (s.tutorial === 1) { key = 'hint1'; if (s.gens[0] >= 1) { s.tutorial = 2; hintTimer = Date.now(); } }
-    else if (s.tutorial === 2) { key = 'hint2'; if (Date.now() - hintTimer > 12000 || s.gens[0] >= 10) s.tutorial = 3; }
-    h.hidden = !key;
-    if (key && h.dataset.k !== key + lang) { h.textContent = T(key); h.dataset.k = key + lang; }
+    document.documentElement.style.setProperty('--sun', 'rgb(' + R.sunColor().join(',') + ')');
+    $('pollTxt').textContent = (poll > 0 && poll < 1 ? loc(poll.toFixed(1)) : Math.ceil(poll)) + ' %'; $('pollBar').style.width = poll + '%';
+    const cc = Wd.contCap(s, z), cont = s.cont[z].length, lb = $('launchBtn');
+    lb.disabled = !cont || Wd.Z[z].launching > 0; lb.classList.toggle('is-full', cont >= cc);
+    lb.querySelector('span').textContent = T('launch') + (cont ? ' · ' + fmt(Wd.contValue(s, z)) + ' $' : '');
+    $('viewSeg').hidden = !s.ship;
+    $('viewGround').classList.toggle('is-on', z === 'ground'); $('viewOrbit').classList.toggle('is-on', z === 'orbit');
+    $('boost').hidden = !(s.frenzy > 0); if (s.frenzy > 0) $('boost').textContent = '×2 · ' + Math.ceil(s.frenzy) + ' s';
+    $('banner').hidden = !s.awaitingTravel;
+    if (s.awaitingTravel) {
+      const next = Wd.planetInfo(s, s.planet + 1);
+      $('bannerTitle').textContent = T('cleanTitle', { name: info.good }); $('bannerText').textContent = T('cleanText', { old: info.bad, next: next.bad }); $('travelBtn').textContent = T('travel', { next: next.bad });
+    }
+    const vis = P.visible(s);
+    document.querySelectorAll('[data-tab]').forEach(b => { b.hidden = !vis[b.dataset.tab]; });
+    if (!vis[tab]) showTab('shop');
+    const d = P.dots(s); for (const k in d) { const e = $('dot-' + k); if (e) e.hidden = !d[k]; }
+    const h = $('hint'), key = R.wreck && !s.wrecks ? 'hintWreck' : null;
+    h.hidden = !key; if (key && h.dataset.k !== key + lang) { h.textContent = T(key); h.dataset.k = key + lang; }
   }
 
   /* ---------- Événements du moteur ---------- */
-  C.on('shot', e => { Scene.playerShot(e.tonnes, e.auto); if (!e.auto) sfx('shot'); });
-  C.on('cleaned', () => {
-    Scene.cleaned(); sfx('clean');
-    if (C.relic(s, 'autopilot')) setTimeout(() => { if (s.awaitingTravel) C.travel(s); }, 2600);
+  Wd.on('pickup', e => { if (e.z === s.view) R.fxPickup(e); if (e.who === 'me') { sfx(e.combo >= 3 ? 'combo' : 'pickup'); if (e.z === 'ground') R.fxCombo(e.combo); } });
+  Wd.on('mission', e => { sfx('level'); toast(T('missionDone') + (e.cash ? ' · +' + fmt(e.cash) + ' $' : ''), T('mission.' + e.id, { n: (G.MISSIONS.find(m => m.id === e.id) || {}).need }), 'ach'); P.render(true); });
+  Wd.on('full', () => sfx('full'));
+  Wd.on('dump', e => { if (e.z === 'ground') R.fxDump(e); if (e.who === 'me') { sfx('dump'); if (s.tutorial === 1) s.tutorial = 2; } });
+  Wd.on('contFull', z => { if (z === s.view && !(z === 'ground' ? s.team.operator : s.team.gunner)) toast(T('contFull'), '', 'sun'); });
+  Wd.on('launch', e => {
+    const label = fmt(e.money);
+    if (e.z === s.view) { (e.z === 'ground' ? R : O).fxLaunch(Object.assign({ label }, e)); if (!e.auto || Math.random() < 0.3) sfx('launch'); }
+    if (e.full && !e.auto) toast('+' + label + ' $', T('fullBonus'), 'sun');
+    if (!e.auto && s.tutorial === 2) s.tutorial = 3;
   });
-  C.on('travel', p => {
-    Scene.travel();
-    F.GENS.forEach((g, i) => { if (C.unlockPlanet(i) === p && i >= 2) toast(T('newGen', { gen: N(g.name) }), N(g.fact)); });
-    refreshFleet();
-  });
-  C.on('milestone', e => toast(T('msToast', { gen: N(F.GENS[e.i].name), n: e.count, f: C.msFactor(s) }), '', 'ms'));
-  C.on('ach', a => { toast(T('achToast'), N(a.name), 'ach'); sfx('ach'); });
-  C.on('salvage', r => {
-    sfx('wreck');
-    if (r.type === 'cargo') toast(T('cargo', { c: fmt(r.credits) }), '', 'sun');
-    else toast(T(r.type, { s: Math.round(r.secs) }), '', 'sun');
-  });
-  C.on('jump', g => { Scene.jump(); sfx('jump'); toast(T('jumpToast', { g: C.roman(s.jumps + 1), n: g }), '', 'sun'); buildFleet(); refreshGalaxy(true); });
-  C.on('relic', r => toast(T('relicToast', { name: N(r.name) }), '', 'ach'));
+  Wd.on('buy', () => { if (s.tutorial === 3) s.tutorial = 4; });
+  Wd.on('ship', () => { sfx('hire'); toast(T('buyShip'), T('hintOrbit'), 'sun'); });
+  Wd.on('hire', id => { sfx('hire'); toast(T('hireToast', { name: T('hire.' + id) }), T('hire.' + id + '.d')); if (s.tutorial === 4) s.tutorial = 5; });
+  Wd.on('gold', e => { sfx('gold'); if (e.who === 'me') { R.fxGold(); toast(T('goldToast'), T('goldText', { n: e.n }), 'sun'); } });
+  Wd.on('level', n => { sfx('level'); toast(T('levelUp', { n }), T('levelUpText'), 'ach'); });
+  Wd.on('crewLevel', e => { if (e.lvl % 5 === 0) toast(T('empLevel', { n: e.lvl }), ''); });
+  Wd.on('cleaned', () => { R.fxClean(); sfx('clean'); });
+  Wd.on('travel', () => R.fxTravel());
+  Wd.on('salvage', r => { sfx('wreck'); toast(r.type === 'cargo' ? T('cargo', { m: fmt(r.money) }) : r.type === 'frenzy' ? T('frenzy', { s: r.secs }) : T('goldRain'), '', 'sun'); });
+  Wd.on('jump', g => { R.fxJump(); sfx('clean'); toast(T('jumpToast', { g: roman(s.jumps + 1) }), T('jumpToastText', { n: g }), 'sun'); });
+  Wd.on('ach', id => { sfx('learn'); toast(T('achToast'), A(id)[0], 'ach'); });
 
-  /* ---------- Entrées ---------- */
-  function fire() { if (!s.awaitingTravel) C.shoot(s); }
+  /* ---------- Commandes ---------- */
+  const keys = new Set();
+  const KEYMAP = { KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0], KeyW: [0, -1], ArrowUp: [0, -1], KeyS: [0, 1], ArrowDown: [0, 1] };
+  const syncKeys = () => { let x = 0, y = 0; keys.forEach(c => { x += KEYMAP[c][0]; y += KEYMAP[c][1]; }); Wd.input.x = Math.sign(x); Wd.input.y = Math.sign(y); };
+  const typing = () => { const t = document.activeElement && document.activeElement.tagName; return t === 'INPUT' || t === 'TEXTAREA'; };
   function bindInputs() {
-    const cv = $('scene');
+    document.addEventListener('keydown', e => {
+      if (typing() || !$('modal').hidden && e.key !== 'Escape') return;
+      if (KEYMAP[e.code]) { keys.add(e.code); syncKeys(); e.preventDefault(); }
+      else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat && document.activeElement.tagName !== 'BUTTON') { Wd.launch(s, s.view); e.preventDefault(); }
+      else if (e.code === 'Tab' && s.ship && document.activeElement === document.body) { setView(s.view === 'ground' ? 'orbit' : 'ground'); e.preventDefault(); }
+      else if (e.key === 'Escape' && !$('modal').hidden) $('modal').hidden = true;
+    });
+    document.addEventListener('keyup', e => { if (keys.delete(e.code)) syncKeys(); });
+    window.addEventListener('blur', () => { keys.clear(); syncKeys(); });
+    const cv = $('scene'); let dragging = false;
+    const aim = ev => {
+      const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, rd = s.view === 'ground' ? R : O;
+      const it = rd.itemAt(x, y);
+      if (it) Wd.goTo(s, it.x, it.y); else { const p = rd.toWorld(x, y); Wd.goTo(s, p.x, p.y); }
+    };
     cv.addEventListener('pointerdown', ev => {
       const r = cv.getBoundingClientRect();
-      if (Scene.hitWreck(ev.clientX - r.left, ev.clientY - r.top, ev.pointerType !== 'mouse')) { C.salvage(s); return; }
-      fire();
+      if (R.hitWreck(ev.clientX - r.left, ev.clientY - r.top, ev.pointerType !== 'mouse')) { Wd.salvage(s); return; }
+      dragging = true; cv.setPointerCapture(ev.pointerId); aim(ev);
     });
-    $('fireBtn').addEventListener('click', fire);
-    $('travelBtn').addEventListener('click', () => C.travel(s));
-    document.addEventListener('keydown', ev => {
-      if (ev.code !== 'Space' || ev.repeat || /INPUT|TEXTAREA|BUTTON|SELECT/.test(document.activeElement.tagName)) return;
-      ev.preventDefault(); fire();
-    });
+    cv.addEventListener('pointermove', ev => { if (dragging) aim(ev); });
+    cv.addEventListener('pointerup', () => { dragging = false; });
+    cv.addEventListener('pointercancel', () => { dragging = false; });
+    $('launchBtn').addEventListener('click', () => Wd.launch(s, s.view));
+    $('travelBtn').addEventListener('click', () => Wd.travel(s));
+    $('viewGround').addEventListener('click', () => setView('ground'));
+    $('viewOrbit').addEventListener('click', () => setView('orbit'));
     document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
-    document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !$('modal').hidden) closeModal(); });
   }
 
-  /* ---------- Boucles ---------- */
-  let lastTick = Date.now(), nextWreck = 0, lastSave = Date.now(), lastUi = 0;
-  function scheduleWreck(first) { nextWreck = Date.now() + (first ? 35 : C.wreckInterval(s) * (0.6 + Math.random() * 0.8)) * 1000; }
-  function tick() {
-    const now = Date.now(), dt = (now - lastTick) / 1000;
-    lastTick = now;
-    if (dt > 10) awayReturn(dt); else if (dt > 0) C.tick(s, dt);
-    if (!document.hidden && now >= nextWreck && !Scene.busy()) { if (Scene.spawnWreck()) scheduleWreck(false); }
-    if (now - lastSave > 10000) { C.save(s); lastSave = now; }
-  }
+  /* ---------- Boucle ---------- */
+  let lastUi = 0, lastSave = Date.now(), lastAch = 0, lastTick = Date.now(), nextWreck = Date.now() + 45000;
   function loop(now) {
-    Scene.frame(now);
-    if (now - lastUi > 150) {
-      lastUi = now; hud(); refreshFleet(); refreshUps(); refreshGalaxy(); refreshAch();
-      if (tab === 'opt' && Math.floor(now / 1000) !== Math.floor((now - 150) / 1000)) refreshStats();
-    }
+    const dt = R.frame(now, s.view === 'ground'); O.frame(now, s.view === 'orbit');
+    const real = Date.now(), gap = (real - lastTick) / 1000; lastTick = real;
+    if (gap > 10) awayReturn(gap); else if (dt) Wd.update(s, dt);
+    if (now - lastUi > 150) { lastUi = now; hud(); P.render(false); }
+    if (real - lastAch > 1000) { lastAch = real; Wd.checkAch(s); }
+    if (real > nextWreck && !document.hidden) { const sz = R.size(); if (R.spawnWreck(sz.W, sz.H)) nextWreck = real + Wd.wreckInterval(s) * (0.6 + Math.random() * 0.8) * 1000; }
+    if (real - lastSave > 10000) { Wd.save(s); lastSave = real; }
     requestAnimationFrame(loop);
   }
   function awayReturn(secs) {
-    const r = C.offline(s, secs);
-    if (secs < 60 || r.tonnes <= 0 && !r.stopped) return;
-    const lines = [T('offlineText', { time: fmtTime(secs), t: fmt(r.tonnes), c: fmt(r.credits) })];
-    if (r.planets) lines.push(T('offlinePlanets', { n: r.planets }));
-    if (r.stopped) lines.push(T('offlineStopped'));
-    if (r.capped) lines.push(T('offlineCap', { h: C.relic(s, 'offline') ? 24 : F.OFFLINE_CAP / 3600 }));
+    const r = Wd.offline(s, secs);
+    if (!r || secs < 60 || !r.n) return;
+    const lines = [T('offlineText', { time: fmtTime(secs), n: fmt(r.n), m: fmt(r.money) })];
+    if (r.stop) lines.push(T('offlineStop'));
     modal(T('welcomeBack'), lines, [{ label: T('continue'), cls: 'btn-sun' }]);
   }
-
-  /* ---------- Démarrage ---------- */
   function afterLoad() {
     lang = s.settings.lang || ((navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en');
-    lastStage = -1; upsSig = galSig = achSig = '';
-    setLang(lang);
+    lastStage = -1; P.sig = {}; setLang(lang);
   }
   function start(data) {
     s = null;
-    if (data && data.save) { try { s = C.revive(JSON.parse(data.save)); } catch (e) { s = null; } }
-    if (!s) s = C.load();
-    const loaded = !!s;
-    if (!s) s = C.fresh();
-    Scene.init($('scene'), () => s, fmt);
-    F.dbg = () => s; // accès de test depuis la console
-    try { const t = localStorage.getItem('feedthesun.tab'); if (t && $('tab-' + t)) tab = t; } catch (e) { /* stockage indisponible */ }
-    bindInputs();
-    afterLoad();
-    if (loaded && !(data && data.save)) awayReturn((Date.now() - s.last) / 1000);
-    if (!loaded) modal(T('introTitle'), [T('introText1'), T('introText2'), T('introText3')], [{ label: T('introGo'), cls: 'btn-sun' }]);
-    scheduleWreck(s.wrecks === 0);
+    if (data && data.save) { try { s = Wd.revive(JSON.parse(data.save)); } catch (e) { s = null; } }
+    const fromHot = !!s, loaded = !!(s || (s = Wd.load()));
+    if (!s) s = Wd.fresh();
+    if (!s.ship) s.view = 'ground';
+    Wd.reset(s);
+    R.init($('scene'), () => s); O.init($('scene'), () => s);
+    G.dbg = () => s; // accès de test depuis la console
+    try { const t = localStorage.getItem('feedthesun.v3.tab'); if (t && $('tab-' + t)) tab = t; if (tab === 'gear' || tab === 'team') tab = 'shop'; } catch (e) { /* stockage indisponible */ }
+    bindInputs(); afterLoad();
+    if (loaded && !fromHot) awayReturn((Date.now() - s.last) / 1000);
+    if (!loaded) modal(T('introTitle'), [T('introText1'), T('introText2')], [{ label: T('introGo'), cls: 'btn-sun' }]);
     lastTick = Date.now();
-    setInterval(tick, 100);
     requestAnimationFrame(loop);
-    document.addEventListener('visibilitychange', () => { if (document.hidden) C.save(s); });
-    window.addEventListener('pagehide', () => C.save(s));
-    if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({ save: C.serialize(s) }));
+    document.addEventListener('visibilitychange', () => { if (document.hidden) Wd.save(s); });
+    window.addEventListener('pagehide', () => Wd.save(s));
+    if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({ save: JSON.stringify(s) }));
   }
   const hot = window.claude && window.claude.hot;
   if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});

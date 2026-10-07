@@ -9,7 +9,7 @@
   let cv, ctx, W = 0, H = 0, dpr = 1, k = 1, camX = 0, getState, time = 0, shake = 0, last = 0;
   let shownClean = 0, sunRGB = null, sunFlash = 0, celebrate = 0, travelT = -1, jumpT = -1;
   const arcs = [], launches = [], sparks = [], floaters = [], flares = [];
-  let stars = [];
+  let stars = [], combo = { n: 0, t: 9 };
 
   const rnd = (a, b) => a + Math.random() * (b - a);
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -158,7 +158,9 @@
     ctx.fillStyle = '#2f5d7a'; ctx.fillRect(sx(cx - cw / 2), sy(cy - ch), cw * k, ch * k);
     ctx.fillStyle = '#3d7499'; for (let i = 0; i < 4; i++) ctx.fillRect(sx(cx - cw / 2 + 1 + i * 2.1), sy(cy - ch + 0.6), 0.9 * k, (ch - 1.2) * k);
     ctx.fillStyle = 'rgba(255,211,107,0.9)'; ctx.fillRect(sx(cx - cw / 2), sy(cy + 0.4), cw * k * Math.min(1, fill), 0.7 * k);
-    const c = s.cont.ground;
+    const c = s.cont.ground, cap = Wd.contCap(s, 'ground');
+    ctx.font = '600 ' + Math.max(11, 1.9 * k) + 'px "Martian Mono", ui-monospace, monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = c.length >= cap ? '#ffd36b' : 'rgba(255,255,255,0.85)'; ctx.fillText(c.length + '/' + cap, sx(cx), sy(cy - ch - 3.2));
     for (let i = 0; i < Math.min(6, c.length); i++) { const [kk, g] = strip(c[c.length - 1 - i]); R.drawJunk(ctx, kk, sx(cx - 3 + i * 1.2), sy(cy - ch - 0.4), 1.1 * k, i * 0.7, 1, g); }
   }
 
@@ -187,6 +189,13 @@
     if (s.bag.length) {
       const n = Math.min(cap, 20), w = Math.min(14, n * 1.1) * k, x0 = x - w / 2;
       for (let i = 0; i < n; i++) { ctx.fillStyle = i < s.bag.length * n / cap ? (s.bag.length >= cap ? '#ffd36b' : '#ece6d9') : 'rgba(255,255,255,0.18)'; ctx.fillRect(x0 + (i / n) * w, y - 13.4 * depth(p.y) * k, Math.max(2, w / n - 1.5), 0.7 * k); }
+      if (s.bag.length >= cap && G.U) { ctx.font = '600 ' + Math.max(11, 1.8 * k) + 'px "Martian Mono", ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd36b'; ctx.fillText(G.U.T('full'), x, y - 15.2 * depth(p.y) * k); }
+    }
+    if (combo.n >= 2 && combo.t < 1.1) {
+      const a = 1 - combo.t / 1.1, pop = 1 + Math.max(0, 0.35 - combo.t) * 1.5;
+      ctx.save(); ctx.translate(x + 7 * k, y - 15 * k - combo.t * 3 * k); ctx.scale(pop, pop);
+      ctx.font = Math.max(14, 2.6 * k) + 'px Michroma, sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,211,107,' + a + ')';
+      ctx.fillText('×' + combo.n, 0, 0); ctx.restore();
     }
   }
 
@@ -198,6 +207,7 @@
   R.fxTravel = () => { travelT = 0; shownClean = 0; };
   R.fxJump = () => { jumpT = 0; shownClean = 0; };
   R.fxSunUp = () => { sunFlash = 1; const sp = sunPos(); burst(sp.x, sp.y, R.sunColor(), 80, 200); for (let i = 0; i < 4; i++) flares.push({ a: rnd(0, TAU), t: 0, life: rnd(1.2, 2), h: rnd(1, 1.6) }); };
+  R.fxCombo = n => { if (n >= 2) combo = { n, t: 0 }; };
   R.fxGold = () => { const p = Wd.player; floaters.push({ text: '★', x: p.x, y: p.y - 14, t: 0 }); };
   function burst(x, y, c, n, sp) { for (let i = 0; i < n; i++) { const a = rnd(0, TAU), v = rnd(0.3, 1) * sp; sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, life: rnd(0.5, 1.3), c }); } }
 
@@ -246,7 +256,7 @@
   R.frame = (now, active) => {
     if (!ctx || !W) return 0;
     const dt = clamp(last ? (now - last) / 1000 : 0.016, 0, 0.05);
-    last = Math.max(last, now); time += dt;
+    last = Math.max(last, now); time += dt; combo.t += dt;
     const s = getState();
     R.tickSun(s);
     if (!active) return dt;
