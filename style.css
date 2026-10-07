@@ -298,3 +298,60 @@ a.btn { text-decoration: none; display: inline-block; }
   .sun-meta, .eyebrow { display: none; }
   .planet-name { font-size: 13px; }
 }
+
+/* ---------- v3.2 : plein écran, trois boutons, page du bas, arbre ---------- */
+.game { height: 100%; }
+.game .stage { height: 100%; }
+.toasts { top: 72px; bottom: auto; left: 50%; transform: translateX(-50%); width: min(320px, calc(100% - 32px)); }
+.view-seg { top: 16px; bottom: auto; left: 50%; transform: translateX(-50%); }
+.dock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 8px; z-index: 3; }
+.dock-btn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 78px; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(8, 10, 16, 0.86); color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+.dock-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.dock-btn:hover { border-color: var(--mute); }
+.dock-btn.is-on { border-color: var(--sun); color: var(--sun); }
+.dock-btn .dot { position: absolute; top: 6px; right: 10px; margin: 0; }
+.fire { right: 16px; bottom: 16px; }
+.sheet { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 104%); width: min(720px, 100%); height: min(64%, 580px); background: var(--panel); border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0; z-index: 6; display: flex; flex-direction: column; transition: transform 0.22s ease; box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.55); }
+.sheet.is-open { transform: translate(-50%, 0); }
+.sheet-head { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.sheet-grip { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 40px; height: 4px; border-radius: 2px; background: var(--line); }
+.sheet-head h2 { margin: 0; font: 13px var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sun); }
+.sheet-close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer; }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.sheet[data-tab="tree"] .sheet-body { overflow: hidden; }
+.small { font-size: 12px; }
+.tree-bar { display: flex; justify-content: space-between; align-items: center; gap: 4px 12px; flex-wrap: wrap; }
+.tree-pts { font: 600 13px var(--font-data); color: var(--sun); white-space: pre; }
+.tree-view { position: relative; flex: 1; min-height: 200px; overflow: hidden; border-radius: 14px; background: radial-gradient(circle at 50% 40%, #151a29, #090b12); border: 1px solid var(--line); touch-action: none; cursor: grab; }
+.tree-view:active { cursor: grabbing; }
+.tree-pan { position: absolute; left: 0; top: 0; width: 1400px; height: 1400px; will-change: transform; }
+.tree-lines { position: absolute; inset: 0; }
+.tree-lines line { stroke: #283046; stroke-width: 3; }
+.tree-lines line.next { stroke: rgba(255, 211, 107, 0.5); stroke-dasharray: 6 6; }
+.tree-lines line.on { stroke: var(--clean); }
+.tnode { position: absolute; transform: translate(-50%, -50%); width: 96px; padding: 8px 6px; border-radius: 14px; border: 2px solid #283046; background: #121626; color: var(--ink); display: grid; justify-items: center; gap: 2px; cursor: pointer; text-align: center; }
+.tnode-ico { font-size: 16px; line-height: 1; }
+.tnode-name { font-size: 11px; font-weight: 600; line-height: 1.2; }
+.tnode-lvl { font: 10px var(--font-data); color: var(--mute); min-height: 12px; }
+.tnode.skill .tnode-ico { color: #8fd0ff; }
+.tnode.tech .tnode-ico { color: #ffd36b; }
+.tnode.root { border-color: var(--clean); width: 104px; }
+.tnode.is-locked { opacity: 0.38; }
+.tnode.is-poor, .tnode.is-partial { opacity: 0.8; }
+.tnode.is-can { border-color: var(--sun); box-shadow: 0 0 18px -4px var(--sun); }
+.tnode.is-owned { border-color: var(--clean); background: #12241d; }
+.tnode.is-sel { outline: 2px solid #fff; outline-offset: 2px; }
+.tree-card { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: var(--raise); }
+.tc-name { font-weight: 700; }
+.tc-desc { font-size: 13px; }
+.tc-fact { font-size: 12px; color: var(--mute); }
+.tree-card .btn { justify-self: start; }
+@media (max-width: 860px) {
+  .dock { left: 12px; bottom: 12px; transform: none; gap: 6px; }
+  .dock-btn { min-width: 60px; padding: 7px 8px; font-size: 10px; }
+  .fire { right: 12px; bottom: 12px; }
+  .view-seg { top: auto; bottom: 74px; left: 12px; transform: none; }
+  .sheet { height: 70%; }
+  .tnode { width: 84px; }
+}
+.sheet[data-tab="tree"] { height: min(88%, 780px); }

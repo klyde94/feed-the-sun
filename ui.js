@@ -1,10 +1,11 @@
 'use strict';
-/* Feed the Sun v3 — interface principale : affichage, commandes, sons, événements, sauvegarde, installation, démarrage. */
+/* Feed the Sun v3 — interface : jeu en plein écran, trois boutons (Améliorer, Arbre, Réglages) qui ouvrent une page en bas,
+   commandes, sons, événements, sauvegarde, installation, démarrage. */
 (function () {
   const G = window.FTS3, Wd = G.W, R = G.R, O = G.O, P = G.P;
   const $ = id => document.getElementById(id);
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-  let s = null, lang = 'fr', tab = 'shop', deferredInstall = null;
+  let s = null, lang = 'fr', tab = null, deferredInstall = null;
 
   /* ---------- Textes et nombres ---------- */
   const T = (k, v) => { let str = G.I18N[lang][k]; if (str == null) str = G.I18N.fr[k]; if (str == null) str = k; if (v) for (const x in v) str = String(str).split('{' + x + '}').join(v[x]); return str; };
@@ -22,15 +23,16 @@
   const A = id => (G.I18N[lang].ach[id] || G.I18N.fr.ach[id]);
 
   /* ---------- Sons synthétisés ---------- */
-  let ac = null, lastSfx = {};
+  let ac = null; const lastSfx = {};
   function sfx(type) {
     if (!s || !s.settings.sound) return;
     const now = performance.now(); if (now - (lastSfx[type] || 0) < 60) return; lastSfx[type] = now;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-      const p = { pickup: [600, 900, 0.07, 0.03, 'sine'], dump: [220, 160, 0.06, 0.035, 'triangle'], launch: [120, 520, 0.7, 0.05, 'sawtooth'], buy: [520, 780, 0.09, 0.04, 'sine'],
-        full: [440, 330, 0.18, 0.035, 'square'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.06, 'sine'], gold: [880, 1320, 0.25, 0.05, 'sine'], combo: [700, 1100, 0.08, 0.035, 'sine'],
-        level: [440, 880, 0.5, 0.06, 'triangle'], learn: [660, 990, 0.3, 0.05, 'sine'], hire: [392, 523, 0.25, 0.05, 'triangle'], wreck: [990, 1480, 0.3, 0.05, 'sine'] }[type];
+      const p = { pickup: [600, 900, 0.07, 0.03, 'sine'], combo: [700, 1100, 0.08, 0.035, 'sine'], dump: [220, 160, 0.06, 0.035, 'triangle'], launch: [120, 520, 0.7, 0.05, 'sawtooth'],
+        buy: [520, 780, 0.09, 0.04, 'sine'], full: [440, 330, 0.18, 0.035, 'square'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.06, 'sine'],
+        gold: [880, 1320, 0.25, 0.05, 'sine'], level: [440, 880, 0.5, 0.06, 'triangle'], learn: [660, 990, 0.3, 0.05, 'sine'], hire: [392, 523, 0.25, 0.05, 'triangle'],
+        wreck: [990, 1480, 0.3, 0.05, 'sine'], open: [300, 420, 0.08, 0.03, 'sine'] }[type];
       if (!p) return;
       const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
       o.type = p[4]; o.frequency.setValueAtTime(p[0], t); o.frequency.exponentialRampToValueAtTime(p[1], t + p[2]);
@@ -60,20 +62,28 @@
   const install = () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(() => { deferredInstall = null; P.render(true); }); };
   if ('serviceWorker' in navigator && location.protocol === 'https:' && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-  G.U = { T, fmt, fmtNum, fmtTime, roman, A, sfx, toast, modal, state: () => s, tab: () => tab, lang: () => lang, setLang: k => setLang(k), canInstall, install, reset: () => { Wd.wipe(); s = Wd.fresh(); s.settings.lang = lang; Wd.reset(s); afterLoad(); } };
+  G.U = { T, fmt, fmtNum, fmtTime, roman, A, sfx, toast, modal, state: () => s, tab: () => tab, lang: () => lang, setLang: k => setLang(k), canInstall, install,
+    reset: () => { Wd.wipe(); s = Wd.fresh(); s.settings.lang = lang; Wd.reset(s); closeSheet(); afterLoad(); } };
 
-  /* ---------- Onglets, langue, vue ---------- */
-  function showTab(name) {
-    tab = name;
-    document.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('is-on', on); b.setAttribute('aria-selected', on); });
-    ['shop', 'trees', 'galaxy', 'opt'].forEach(n => { $('tab-' + n).hidden = n !== name; });
-    P.render(true);
-    try { localStorage.setItem('feedthesun.v3.tab', name); } catch (e) { /* stockage indisponible */ }
+  /* ---------- La page du bas ---------- */
+  function openSheet(name) {
+    if (tab === name) { closeSheet(); return; }
+    tab = name; sfx('open');
+    $('sheet').hidden = false; $('sheet').dataset.tab = name;
+    $('sheetTitle').textContent = T(name === 'shop' ? 'tabShop' : name === 'tree' ? 'tabTree' : 'tabOpt');
+    document.querySelectorAll('[data-open]').forEach(b => b.classList.toggle('is-on', b.dataset.open === name));
+    $('sheetBody').scrollTop = 0; P.render(true);
+    requestAnimationFrame(() => $('sheet').classList.add('is-open'));
+  }
+  function closeSheet() {
+    tab = null; $('sheet').classList.remove('is-open');
+    document.querySelectorAll('[data-open]').forEach(b => b.classList.remove('is-on'));
+    setTimeout(() => { if (!tab) $('sheet').hidden = true; }, 220);
   }
   function setLang(k) {
     lang = k; s.settings.lang = k; document.documentElement.lang = k;
     document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = T(e.dataset.i18n); });
-    showTab(tab);
+    if (tab) { $('sheetTitle').textContent = T(tab === 'shop' ? 'tabShop' : tab === 'tree' ? 'tabTree' : 'tabOpt'); P.render(true); }
   }
   function setView(v) {
     if (v === 'orbit' && !s.ship) return;
@@ -86,7 +96,7 @@
   function hud() {
     const z = s.view, info = Wd.planetInfo(s);
     $('money').textContent = fmt(s.money);
-    $('lvlRow').hidden = $('xpRow').hidden = s.level < 2;
+    $('lvlRow').hidden = s.level < 2;
     $('lvlTxt').textContent = T('level', { n: s.level }); $('xpBar').style.width = Math.min(100, (s.xp / G.xpNeed(s.level)) * 100) + '%';
     $('ptsTxt').textContent = (s.skillPts ? '✦ ' + s.skillPts + '  ' : '') + (s.techPts ? '★ ' + s.techPts : '');
     const m = Wd.mission(s);
@@ -94,10 +104,8 @@
     $('missionReward').textContent = m && m.cash ? '+' + fmt(m.cash) + ' $' : '';
     $('missionBar').style.width = (m ? (m.val / m.need) * 100 : 100) + '%';
     $('planetName').textContent = s.awaitingTravel ? info.good : info.bad;
-    $('planetMeta').textContent = T('planetN', { n: s.planet + 1 }) + (s.jumps ? ' · ' + T('galaxyN', { g: roman(s.jumps + 1) }) : '');
-    const stage = Wd.sunStage(s), sd = G.SUN[stage], poll = Wd.pollution(s) * 100;
-    $('sunMeta').textContent = G.I18N[lang].sun[stage] + ' · ' + sd.k.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') + ' K';
-    if (lastStage >= 0 && stage > lastStage) { toast(T('sunToast'), G.I18N[lang].sun[stage], 'sun'); R.fxSunUp(); O.fxSunUp(); sfx('sun'); }
+    const stage = Wd.sunStage(s), poll = Wd.pollution(s) * 100;
+    if (lastStage >= 0 && stage > lastStage) { toast(T('sunToast'), G.I18N[lang].sun[stage], 'sun'); R.fxSunUp(); if (O.fxSunUp) O.fxSunUp(); sfx('sun'); }
     lastStage = stage;
     document.documentElement.style.setProperty('--sun', 'rgb(' + R.sunColor().join(',') + ')');
     $('pollTxt').textContent = (poll > 0 && poll < 1 ? loc(poll.toFixed(1)) : Math.ceil(poll)) + ' %'; $('pollBar').style.width = poll + '%';
@@ -112,29 +120,25 @@
       const next = Wd.planetInfo(s, s.planet + 1);
       $('bannerTitle').textContent = T('cleanTitle', { name: info.good }); $('bannerText').textContent = T('cleanText', { old: info.bad, next: next.bad }); $('travelBtn').textContent = T('travel', { next: next.bad });
     }
-    const vis = P.visible(s);
-    document.querySelectorAll('[data-tab]').forEach(b => { b.hidden = !vis[b.dataset.tab]; });
-    if (!vis[tab]) showTab('shop');
     const d = P.dots(s); for (const k in d) { const e = $('dot-' + k); if (e) e.hidden = !d[k]; }
     const h = $('hint'), key = R.wreck && !s.wrecks ? 'hintWreck' : null;
     h.hidden = !key; if (key && h.dataset.k !== key + lang) { h.textContent = T(key); h.dataset.k = key + lang; }
   }
 
   /* ---------- Événements du moteur ---------- */
-  Wd.on('pickup', e => { if (e.z === s.view) R.fxPickup(e); if (e.who === 'me') { sfx(e.combo >= 3 ? 'combo' : 'pickup'); if (e.z === 'ground') R.fxCombo(e.combo); } });
-  Wd.on('mission', e => { sfx('level'); toast(T('missionDone') + (e.cash ? ' · +' + fmt(e.cash) + ' $' : ''), T('mission.' + e.id, { n: (G.MISSIONS.find(m => m.id === e.id) || {}).need }), 'ach'); P.render(true); });
+  Wd.on('pickup', e => { if (e.who === 'me') { R.fxPickup(e); sfx(e.combo >= 3 ? 'combo' : 'pickup'); if (e.z === 'ground') R.fxCombo(e.combo); } });
+  Wd.on('mission', e => { sfx('level'); toast(T('missionDone') + (e.cash ? ' · +' + fmt(e.cash) + ' $' : ''), T('mission.' + e.id, { n: (G.MISSIONS.find(m => m.id === e.id) || {}).need }), 'ach'); if (tab) P.render(true); });
   Wd.on('full', () => sfx('full'));
-  Wd.on('dump', e => { if (e.z === 'ground') R.fxDump(e); if (e.who === 'me') { sfx('dump'); if (s.tutorial === 1) s.tutorial = 2; } });
+  Wd.on('dump', e => { R.fxDump(e); if (e.who === 'me') sfx('dump'); });
   Wd.on('contFull', z => { if (z === s.view && !(z === 'ground' ? s.team.operator : s.team.gunner)) toast(T('contFull'), '', 'sun'); });
   Wd.on('launch', e => {
     const label = fmt(e.money);
     if (e.z === s.view) { (e.z === 'ground' ? R : O).fxLaunch(Object.assign({ label }, e)); if (!e.auto || Math.random() < 0.3) sfx('launch'); }
     if (e.full && !e.auto) toast('+' + label + ' $', T('fullBonus'), 'sun');
-    if (!e.auto && s.tutorial === 2) s.tutorial = 3;
   });
-  Wd.on('buy', () => { if (s.tutorial === 3) s.tutorial = 4; });
   Wd.on('ship', () => { sfx('hire'); toast(T('buyShip'), T('hintOrbit'), 'sun'); });
-  Wd.on('hire', id => { sfx('hire'); toast(T('hireToast', { name: T('hire.' + id) }), T('hire.' + id + '.d')); if (s.tutorial === 4) s.tutorial = 5; });
+  Wd.on('district', id => { sfx('clean'); toast(T('districtOpen', { name: T('district.' + id) }), T('district.' + id + '.d'), 'sun'); });
+  Wd.on('hire', id => { sfx('hire'); toast(T('hireToast', { name: T('hire.' + id) }), T('hire.' + id + '.d')); });
   Wd.on('gold', e => { sfx('gold'); if (e.who === 'me') { R.fxGold(); toast(T('goldToast'), T('goldText', { n: e.n }), 'sun'); } });
   Wd.on('level', n => { sfx('level'); toast(T('levelUp', { n }), T('levelUpText'), 'ach'); });
   Wd.on('crewLevel', e => { if (e.lvl % 5 === 0) toast(T('empLevel', { n: e.lvl }), ''); });
@@ -151,42 +155,46 @@
   const typing = () => { const t = document.activeElement && document.activeElement.tagName; return t === 'INPUT' || t === 'TEXTAREA'; };
   function bindInputs() {
     document.addEventListener('keydown', e => {
-      if (typing() || !$('modal').hidden && e.key !== 'Escape') return;
+      if (typing()) return;
+      if (e.key === 'Escape') { if (!$('modal').hidden) $('modal').hidden = true; else if (tab) closeSheet(); return; }
+      if (!$('modal').hidden) return;
       if (KEYMAP[e.code]) { keys.add(e.code); syncKeys(); e.preventDefault(); }
       else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat && document.activeElement.tagName !== 'BUTTON') { Wd.launch(s, s.view); e.preventDefault(); }
-      else if (e.code === 'Tab' && s.ship && document.activeElement === document.body) { setView(s.view === 'ground' ? 'orbit' : 'ground'); e.preventDefault(); }
-      else if (e.key === 'Escape' && !$('modal').hidden) $('modal').hidden = true;
+      else if (e.code === 'Tab' && s.ship) { setView(s.view === 'ground' ? 'orbit' : 'ground'); e.preventDefault(); }
     });
     document.addEventListener('keyup', e => { if (keys.delete(e.code)) syncKeys(); });
     window.addEventListener('blur', () => { keys.clear(); syncKeys(); });
-    const cv = $('scene'); let dragging = false;
-    const aim = ev => {
+    const cv = $('scene'); let dragging = false, lastAim = 0;
+    const aim = (ev, force) => {
+      const now = performance.now(); if (!force && now - lastAim < 120) return; lastAim = now;
       const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, rd = s.view === 'ground' ? R : O;
       const it = rd.itemAt(x, y);
       if (it) Wd.goTo(s, it.x, it.y); else { const p = rd.toWorld(x, y); Wd.goTo(s, p.x, p.y); }
     };
     cv.addEventListener('pointerdown', ev => {
+      if (tab) { closeSheet(); return; }
       const r = cv.getBoundingClientRect();
       if (R.hitWreck(ev.clientX - r.left, ev.clientY - r.top, ev.pointerType !== 'mouse')) { Wd.salvage(s); return; }
-      dragging = true; cv.setPointerCapture(ev.pointerId); aim(ev);
+      dragging = true; cv.setPointerCapture(ev.pointerId); aim(ev, true);
     });
-    cv.addEventListener('pointermove', ev => { if (dragging) aim(ev); });
+    cv.addEventListener('pointermove', ev => { if (dragging) aim(ev, false); });
     cv.addEventListener('pointerup', () => { dragging = false; });
     cv.addEventListener('pointercancel', () => { dragging = false; });
     $('launchBtn').addEventListener('click', () => Wd.launch(s, s.view));
     $('travelBtn').addEventListener('click', () => Wd.travel(s));
     $('viewGround').addEventListener('click', () => setView('ground'));
     $('viewOrbit').addEventListener('click', () => setView('orbit'));
-    document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    $('sheetClose').addEventListener('click', closeSheet);
+    document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openSheet(b.dataset.open)));
   }
 
   /* ---------- Boucle ---------- */
-  let lastUi = 0, lastSave = Date.now(), lastAch = 0, lastTick = Date.now(), nextWreck = Date.now() + 45000;
+  let lastUi = 0, lastSave = Date.now(), lastAch = 0, lastTick = Date.now(), nextWreck = Date.now() + 50000;
   function loop(now) {
     const dt = R.frame(now, s.view === 'ground'); O.frame(now, s.view === 'orbit');
     const real = Date.now(), gap = (real - lastTick) / 1000; lastTick = real;
     if (gap > 10) awayReturn(gap); else if (dt) Wd.update(s, dt);
-    if (now - lastUi > 150) { lastUi = now; hud(); P.render(false); }
+    if (now - lastUi > 150) { lastUi = now; hud(); if (tab) P.render(false); }
     if (real - lastAch > 1000) { lastAch = real; Wd.checkAch(s); }
     if (real > nextWreck && !document.hidden) { const sz = R.size(); if (R.spawnWreck(sz.W, sz.H)) nextWreck = real + Wd.wreckInterval(s) * (0.6 + Math.random() * 0.8) * 1000; }
     if (real - lastSave > 10000) { Wd.save(s); lastSave = real; }
@@ -212,10 +220,9 @@
     Wd.reset(s);
     R.init($('scene'), () => s); O.init($('scene'), () => s);
     G.dbg = () => s; // accès de test depuis la console
-    try { const t = localStorage.getItem('feedthesun.v3.tab'); if (t && $('tab-' + t)) tab = t; if (tab === 'gear' || tab === 'team') tab = 'shop'; } catch (e) { /* stockage indisponible */ }
     bindInputs(); afterLoad();
     if (loaded && !fromHot) awayReturn((Date.now() - s.last) / 1000);
-    if (!loaded) modal(T('introTitle'), [T('introText1'), T('introText2')], [{ label: T('introGo'), cls: 'btn-sun' }]);
+    if (!loaded || s.playTime < 1) modal(T('introTitle'), [T('introText1'), T('introText2')], [{ label: T('introGo'), cls: 'btn-sun' }]);
     lastTick = Date.now();
     requestAnimationFrame(loop);
     document.addEventListener('visibilitychange', () => { if (document.hidden) Wd.save(s); });

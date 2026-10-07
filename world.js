@@ -1,46 +1,49 @@
 'use strict';
-/* Feed the Sun v3 — moteur : zones (sol, orbite), joueur, vaisseau, employés, économie, progression, sauvegarde. */
+/* Feed the Sun v3 — moteur : ville (vue de dessus), orbite, employés, économie, arbre, missions, sauvegarde. */
 (function () {
-  const G = window.FTS3;
+  const G = window.FTS3, C = G.CITY;
   const W = (G.W = {});
   const rnd = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const L = {};
   W.on = (type, fn) => { (L[type] = L[type] || []).push(fn); };
   const emit = (type, data) => { if (!W.mute) (L[type] || []).forEach(fn => fn(data)); };
+  const DIST = C.DISTRICTS.map(d => d.id);
 
   /* ---------- État sauvegardé ---------- */
   W.fresh = () => ({
-    v: 3, money: 0, moneyLife: 0, sent: 0, planet: 0, saved: 0, savedRun: 0, jumps: 0, crystals: 0,
-    pools: { ground: G.planetItems(0, 'ground'), orbit: G.planetItems(0, 'orbit') },
+    v: 4, money: 0, moneyLife: 0, sent: 0, planet: 0, saved: 0, savedRun: 0, jumps: 0, crystals: 0,
+    pollution: G.planetPollution(0), districts: { centre: true },
     cont: { ground: [], orbit: [] }, bag: [], hold: [],
     gear: Object.fromEntries(G.GEAR.map(g => [g.id, 0])), ship: false,
     team: { collector: 0, operator: 0, pilot: 0, gunner: 0 }, teamUps: { trolleys: 0, training: 0 },
     crew: { ground: { xp: 0, lvl: 1 }, orbit: { xp: 0, lvl: 1 } },
-    xp: 0, level: 1, skillPts: 0, skills: {}, techPts: 0, tech: {}, goldLife: 0, wrecks: 0, ach: {},
+    xp: 0, level: 1, skillPts: 0, techPts: 0, tree: { root: 1 }, goldLife: 0, wrecks: 0, ach: {},
     picked: 0, dumped: 0, launches: 0, orbitPicked: 0, mission: 0,
-    frenzy: 0, awaitingTravel: false, tutorial: 0, seenOrbit: false, playTime: 0, view: 'ground',
+    frenzy: 0, awaitingTravel: false, seenOrbit: false, playTime: 0, view: 'ground',
     rate: { items: 0, money: 0 }, settings: { lang: null, sound: true }, last: Date.now(),
   });
 
-  /* ---------- Monde en mémoire (recréé au chargement) ---------- */
-  W.Z = { ground: { items: [], launching: 0, agents: [], dump: 0 }, orbit: { items: [], launching: 0, agents: [], dump: 0 } };
-  W.player = { x: 46, y: 84, tx: null, ty: null, dir: 1, walk: 0, moving: false };
+  /* ---------- Monde en mémoire ---------- */
+  W.city = null;
+  W.Z = { ground: { items: [], launching: 0, agents: [], dump: 0, acc: 0 }, orbit: { items: [], launching: 0, agents: [], dump: 0, acc: 0 } };
+  W.player = { x: C.START.x, y: C.START.y, path: null, dir: 1, walk: 0, moving: false };
   W.ship = { x: 40, y: 42, tx: null, ty: null, dir: 1, moving: false };
   W.input = { x: 0, y: 0 };
-  let nextId = 1, acc = { items: 0, money: 0, t: 0 };
+  W.combo = { n: 0, t: -9 };
+  let nextId = 1, acc = { items: 0, money: 0, t: 0 }, pathBudget = 0;
 
-  /* ---------- Modificateurs (équipement, compétences, technologies) ---------- */
+  /* ---------- Modificateurs ---------- */
   const gearDef = id => G.GEAR.find(g => g.id === id);
   W.gearEff = (s, id) => gearDef(id).eff(s.gear[id]);
-  const sk = (s, id) => !!s.skills[id];
-  const tl = (s, id) => s.tech[id] || 0;
+  const sk = (s, id) => !!s.tree[id];
+  const tl = (s, id) => s.tree[id] || 0;
   W.achCount = s => Object.keys(s.ach).length;
   W.globalMult = s => (1 + 0.05 * tl(s, 'tether')) * (1 + 0.04 * tl(s, 'sorting')) * (1 + G.CRYSTAL_BONUS * s.crystals) * (1 + G.ACH_BONUS * W.achCount(s));
-  W.zoneMult = (s, z) => z === 'ground' ? W.gearEff(s, 'ramp') * (sk(s, 'sorter') ? 1.5 : 1)
+  W.zoneMult = (s, z) => z === 'ground' ? W.gearEff(s, 'ramp') * W.gearEff(s, 'sorting') * (sk(s, 'sorter') ? 1.5 : 1)
     : W.gearEff(s, 'cannon') * (sk(s, 'orbitalShot') ? 1.5 : 1) * (1 + 0.08 * tl(s, 'magnetic'));
-  W.itemValue = (s, z, item) => { const gold = item.endsWith('*'); return G.JUNK[gold ? item.slice(0, -1) : item].value * (gold ? G.GOLD_VALUE : 1) * G.planetValue(s.planet) * W.zoneMult(s, z) * W.globalMult(s); };
-  W.bagCap = s => W.gearEff(s, 'bag') + (sk(s, 'pockets') ? 3 : 0);
+  W.itemValue = (s, z, key) => { const gold = key.endsWith('*'); return G.JUNK[gold ? key.slice(0, -1) : key].value * (gold ? G.GOLD_VALUE : 1) * G.planetValue(s.planet) * W.zoneMult(s, z) * W.globalMult(s); };
+  W.bagCap = s => W.gearEff(s, 'bag') + (sk(s, 'pockets') ? 4 : 0);
   W.holdCap = s => W.gearEff(s, 'hold') * (sk(s, 'doubleHold') ? 2 : 1);
   W.contCap = (s, z) => { const c = W.gearEff(s, 'container') * (1 + 0.1 * tl(s, 'driver')); return Math.round(z === 'orbit' ? c * 0.6 : c); };
   const boost = s => (s.frenzy > 0 ? 2 : 1);
@@ -49,7 +52,7 @@
   W.reach = s => W.gearEff(s, 'magnet') * (sk(s, 'broom') ? 2 : 1) * (1 + 0.1 * tl(s, 'harpoon'));
   W.shipReach = s => W.gearEff(s, 'tractor') * (sk(s, 'debrisMagnet') ? 2 : 1) * (1 + 0.1 * tl(s, 'harpoon'));
   const teamSpeed = s => (1 + 0.1 * s.teamUps.training) * (sk(s, 'teamSpirit') ? 1.25 : 1) * boost(s);
-  W.empCap = s => 4 + s.teamUps.trolleys + (sk(s, 'carts') ? 2 : 0) + tl(s, 'net');
+  W.empCap = s => 5 + s.teamUps.trolleys + (sk(s, 'carts') ? 2 : 0) + tl(s, 'net');
   W.pilotCap = s => 5 + s.teamUps.trolleys + tl(s, 'arm');
   W.empSpeed = s => G.EMP_SPEED * teamSpeed(s) * (1 + 0.05 * tl(s, 'vests')) * (1 + 0.04 * (s.crew.ground.lvl - 1));
   W.pilotSpeed = s => G.PILOT_SPEED * teamSpeed(s) * (sk(s, 'trainedPilots') ? 1.3 : 1) * (1 + 0.08 * tl(s, 'ion')) * (1 + 0.04 * (s.crew.orbit.lvl - 1));
@@ -57,16 +60,20 @@
   W.goldChance = (s, z) => G.GOLD_CHANCE[z] * (sk(s, 'lynx') ? 2 : 1) * (1 + 0.15 * tl(s, 'prospect'));
   W.wreckInterval = s => 70 / (1 + 0.2 * tl(s, 'radar'));
   W.offlineCap = s => (sk(s, 'allNighter') ? 12 : 6) * 3600;
-  W.contValue = (s, z) => {
-    let v = 0; for (const it of s.cont[z]) v += W.itemValue(s, z, it);
-    return Math.round(v * (s.cont[z].length >= W.contCap(s, z) ? G.FULL_BONUS : 1));
-  };
+  W.spawnRate = s => { let r = 0; for (const d of DIST) if (s.districts[d]) r += G.DISTRICT_SPAWN[d]; return G.SPAWN_BASE * r * W.gearEff(s, 'bins'); };
+  W.mapCap = s => G.MAP_CAP * Object.keys(s.districts).length;
+  W.contValue = (s, z) => { let v = 0; for (const it of s.cont[z]) v += W.itemValue(s, z, it); return Math.round(v * (s.cont[z].length >= W.contCap(s, z) ? G.FULL_BONUS : 1)); };
 
-  /* ---------- Coûts et achats ---------- */
+  /* ---------- Boutique ---------- */
   W.gearCost = (s, id) => { const g = gearDef(id); return Math.round(g.base * Math.pow(g.growth, s.gear[id])); };
-  W.canGear = (s, id) => { const g = gearDef(id); return (g.who === 'me' || s.ship) && s.gear[id] < g.max && s.money >= W.gearCost(s, id); };
+  W.canGear = (s, id) => { const g = gearDef(id); return (g.sec !== 'ship' || s.ship) && s.gear[id] < g.max && s.money >= W.gearCost(s, id); };
   W.buyGear = (s, id) => { if (!W.canGear(s, id)) return false; s.money -= W.gearCost(s, id); s.gear[id]++; emit('buy', id); return true; };
-  W.buyShip = s => { if (s.ship || s.money < G.SHIP_COST) return false; s.money -= G.SHIP_COST; s.ship = true; emit('ship'); return true; };
+  W.shipCost = s => Math.round(G.SHIP_COST * G.planetValue(s.planet));
+  W.canShip = s => !s.ship && s.saved >= 1 && s.money >= W.shipCost(s);
+  W.buyShip = s => { if (!W.canShip(s)) return false; s.money -= W.shipCost(s); s.ship = true; emit('ship'); return true; };
+  W.districtCost = (s, id) => Math.round(G.DISTRICT_COST[id] * G.planetValue(s.planet));
+  W.canDistrict = (s, id) => !s.districts[id] && s.money >= W.districtCost(s, id);
+  W.openDistrict = (s, id) => { if (!W.canDistrict(s, id)) return false; s.money -= W.districtCost(s, id); s.districts[id] = true; emit('district', id); return true; };
   const hireDef = id => G.HIRES.find(h => h.id === id);
   W.hireCost = (s, id) => { const h = hireDef(id); return Math.round(h.base * Math.pow(h.growth, s.team[id]) * (sk(s, 'recruiter') ? 0.8 : 1)); };
   W.canHire = (s, id) => { const h = hireDef(id); return (!h.needShip || s.ship) && s.team[id] < h.max && s.money >= W.hireCost(s, id); };
@@ -75,17 +82,23 @@
   W.tupCost = (s, id) => { const u = tupDef(id); return Math.round(u.base * Math.pow(u.growth, s.teamUps[id])); };
   W.canTup = (s, id) => s.teamUps[id] < tupDef(id).max && s.money >= W.tupCost(s, id);
   W.buyTup = (s, id) => { if (!W.canTup(s, id)) return false; s.money -= W.tupCost(s, id); s.teamUps[id]++; emit('buy', id); return true; };
-  W.skillState = (s, branch, i) => {
-    const b = G.SKILLS.find(x => x.branch === branch), n = b.nodes[i];
-    if (s.skills[n.id]) return 'owned';
-    if (i > 0 && !s.skills[b.nodes[i - 1].id]) return 'locked';
-    return s.skillPts >= n.cost ? 'can' : 'poor';
+
+  /* ---------- Le grand arbre ---------- */
+  W.node = id => G.TREE.find(n => n.id === id);
+  W.nodeCost = (s, n) => (n.type === 'tech' ? G.techCost(tl(s, n.id)) : n.cost);
+  W.nodeState = (s, n) => {
+    if (n.id === 'root') return 'owned';
+    const lvl = s.tree[n.id] || 0, done = n.type === 'tech' ? lvl >= n.max : lvl > 0;
+    if (done) return 'owned';
+    if (!s.tree[n.parent]) return 'locked';
+    const pts = n.type === 'tech' ? s.techPts : s.skillPts;
+    return pts >= W.nodeCost(s, n) ? 'can' : (lvl > 0 ? 'partial' : 'poor');
   };
-  W.learn = (s, branch, i) => { if (W.skillState(s, branch, i) !== 'can') return false; const n = G.SKILLS.find(x => x.branch === branch).nodes[i]; s.skillPts -= n.cost; s.skills[n.id] = true; emit('learn', n.id); return true; };
-  W.techUp = (s, id) => {
-    const n = G.TECHS.flatMap(b => b.nodes).find(x => x.id === id), lvl = tl(s, id), cost = G.techCost(lvl);
-    if (lvl >= n.max || s.techPts < cost) return false;
-    s.techPts -= cost; s.tech[id] = lvl + 1; emit('tech', id); return true;
+  W.treeBuy = (s, id) => {
+    const n = W.node(id); if (!n || W.nodeState(s, n) !== 'can') return false;
+    const c = W.nodeCost(s, n);
+    if (n.type === 'tech') s.techPts -= c; else s.skillPts -= c;
+    s.tree[id] = (s.tree[id] || 0) + 1; emit('learn', id); return true;
   };
 
   /* ---------- Planètes, soleil, prestige ---------- */
@@ -94,48 +107,48 @@
     const p = G.PLANETS[n % G.PLANETS.length], c = Math.floor(n / G.PLANETS.length), sfx = c ? ' ' + ['II', 'III', 'IV', 'V', 'VI', 'VII'][Math.min(5, c - 1)] : '';
     return Object.assign({}, p, { bad: p.bad + sfx, good: p.good + sfx });
   };
-  /* La pollution ne compte que le sol : l'orbite est un bonus qui rapporte plus, jamais un blocage. */
-  const carried = () => { let n = 0; for (const a of W.Z.ground.agents) n += a.load.length; return n; };
-  W.pollution = s => (s.pools.ground + s.bag.length + s.cont.ground.length + carried()) / G.planetItems(s.planet, 'ground');
+  W.pollution = s => clamp(s.pollution / G.planetPollution(s.planet), 0, 1);
   W.canJump = s => s.savedRun >= G.JUMP_REQ;
   W.jumpGain = s => (s.savedRun * (s.savedRun + 1)) / 2;
   W.jump = s => {
     if (!W.canJump(s)) return 0;
     const g = W.jumpGain(s), f = W.fresh();
     s.crystals += g; s.jumps++;
-    for (const k of ['money', 'planet', 'savedRun', 'pools', 'cont', 'bag', 'hold', 'gear', 'ship', 'team', 'teamUps', 'crew', 'frenzy', 'awaitingTravel', 'rate']) s[k] = f[k];
+    for (const k of ['money', 'planet', 'savedRun', 'pollution', 'districts', 'cont', 'bag', 'hold', 'gear', 'ship', 'team', 'teamUps', 'crew', 'frenzy', 'awaitingTravel', 'rate']) s[k] = f[k];
     s.view = 'ground'; W.reset(s); emit('jump', g);
     return g;
   };
   function checkClean(s) {
-    if (!s.awaitingTravel && s.pools.ground <= 0 && W.pollution(s) <= 0) {
-      s.awaitingTravel = true; s.saved++; s.savedRun++; emit('cleaned', s.planet);
-    }
+    if (!s.awaitingTravel && s.pollution <= 0) { s.pollution = 0; s.awaitingTravel = true; s.saved++; s.savedRun++; emit('cleaned', s.planet); }
   }
   W.travel = s => {
     if (!s.awaitingTravel) return;
-    s.planet++; s.pools = { ground: G.planetItems(s.planet, 'ground'), orbit: G.planetItems(s.planet, 'orbit') }; s.awaitingTravel = false;
+    s.planet++; s.pollution = G.planetPollution(s.planet); s.districts = { centre: true }; s.awaitingTravel = false;
     W.reset(s); emit('travel', s.planet);
   };
 
-  /* ---------- Déchets dans les zones ---------- */
-  function pickKind(z) { const ws = G.WEIGHTS[z]; let t = 0; for (const [, w] of ws) t += w; let r = Math.random() * t; for (const [k, w] of ws) { r -= w; if (r <= 0) return k; } return ws[0][0]; }
-  function spawn(s, z, near) {
-    const c = G.ZONES[z], x = near ? rnd(c.spawnMin, c.spawnMin + 60) : c.spawnMin + (c.w - 6 - c.spawnMin) * Math.pow(Math.random(), 1.3);
-    W.Z[z].items.push({ id: nextId++, kind: pickKind(z), gold: Math.random() < W.goldChance(s, z), x, y: rnd(c.top + 1.5, c.bottom - 1), a: rnd(-0.6, 0.6), va: z === 'orbit' ? rnd(-0.5, 0.5) : 0, born: performance.now() });
+  /* ---------- Déchets ---------- */
+  function pick(table) { let t = 0; for (const [, w] of table) t += w; let r = Math.random() * t; for (const [k, w] of table) { r -= w; if (r <= 0) return k; } return table[0][0]; }
+  function spawnGround(s) {
+    const p = C.spawnTile(W.city, s); if (!p) return;
+    const d = C.DISTRICTS[C.districtAt(p.x, p.y)].id;
+    W.Z.ground.items.push({ id: nextId++, kind: pick(G.DISTRICT_JUNK[d]), gold: Math.random() < W.goldChance(s, 'ground'), x: p.x + rnd(0.2, 0.8), y: p.y + rnd(0.2, 0.8), a: rnd(-0.6, 0.6), born: performance.now() });
   }
-  function fill(s, z, first) {
-    const items = W.Z[z].items, want = Math.min(G.ZONES[z].visible, s.pools[z]);
-    while (items.length < want) spawn(s, z, first && items.length < 8);
-    while (items.length > s.pools[z]) items.pop();
+  function spawnOrbit(s) {
+    const c = G.ZONES.orbit;
+    W.Z.orbit.items.push({ id: nextId++, kind: pick(G.ORBIT_JUNK), gold: Math.random() < W.goldChance(s, 'orbit'), x: c.spawnMin + (c.w - 6 - c.spawnMin) * Math.random(), y: rnd(c.top + 1.5, c.bottom - 1), a: rnd(-0.6, 0.6), va: rnd(-0.5, 0.5), born: performance.now() });
   }
   W.reset = s => {
-    for (const z of ['ground', 'orbit']) { W.Z[z].items = []; W.Z[z].launching = 0; W.Z[z].agents = []; fill(s, z, true); }
-    Object.assign(W.player, { x: 46, y: 84, tx: null, ty: null }); Object.assign(W.ship, { x: 40, y: 42, tx: null, ty: null });
+    W.city = C.build(s.planet + 1);
+    for (const z of ['ground', 'orbit']) Object.assign(W.Z[z], { items: [], launching: 0, agents: [], dump: 0, acc: 0 });
+    for (let i = 0; i < 40; i++) spawnGround(s);
+    for (let i = 0; i < 14; i++) spawnOrbit(s);
+    Object.assign(W.player, { x: C.START.x, y: C.START.y, path: null });
+    Object.assign(W.ship, { x: 40, y: 42, tx: null, ty: null });
   };
-  W.combo = { n: 0, t: -9 };
   function take(s, z, it, who) {
-    const zz = W.Z[z]; zz.items.splice(zz.items.indexOf(it), 1); s.pools[z]--;
+    const zz = W.Z[z]; zz.items.splice(zz.items.indexOf(it), 1);
+    if (it.claim) { it.claim.target = null; it.claim.path = null; }
     const key = it.kind + (it.gold ? '*' : '');
     if (it.gold) { const n = Math.random() < 0.15 ? 3 : 1; s.techPts += n; s.goldLife++; emit('gold', { n, who, z }); }
     let cash = 0;
@@ -150,14 +163,15 @@
 
   /* ---------- Commandes ---------- */
   W.goTo = (s, x, y) => {
-    const c = G.ZONES[s.view], m = s.view === 'ground' ? W.player : W.ship;
-    m.tx = clamp(x, 4, c.w - 4); m.ty = clamp(y, c.top, c.bottom);
+    if (s.view === 'ground') W.player.path = C.path(W.city, s, W.player.x, W.player.y, x, y);
+    else { const c = G.ZONES.orbit; W.ship.tx = clamp(x, 4, c.w - 4); W.ship.ty = clamp(y, c.top, c.bottom); }
   };
   W.launch = (s, z, auto) => {
     const zz = W.Z[z], cont = s.cont[z];
     if (!cont.length || zz.launching > 0) return false;
     const n = cont.length, full = n >= W.contCap(s, z), money = W.contValue(s, z), kinds = cont.slice(0, 12);
     s.money += money; s.moneyLife += money; s.sent += n; s.launches++; s.cont[z] = [];
+    s.pollution -= n * (z === 'orbit' ? 2 : 1);
     zz.launching = W.launchTime(s);
     if (auto) { acc.items += n; acc.money += money; }
     gainXp(s, n);
@@ -171,121 +185,163 @@
   }
   W.salvage = s => {
     s.wrecks++;
-    const r = Math.random();
-    let res;
+    const r = Math.random(); let res;
     if (r < 0.45) { const m = Math.round(Math.max(90 * s.rate.money, 40 * G.planetValue(s.planet) * W.globalMult(s))); s.money += m; s.moneyLife += m; res = { type: 'cargo', money: m }; }
     else if (r < 0.8) { s.frenzy = 30; res = { type: 'frenzy', secs: 30 }; }
     else { s.techPts += 3; res = { type: 'goldRain' }; }
     emit('salvage', res); return res;
   };
 
-  /* ---------- Déplacement du joueur et du vaisseau ---------- */
-  function steer(m, speed, dt, c, active, vyScale) {
-    let vx = 0, vy = 0;
-    if (active && (W.input.x || W.input.y)) { m.tx = m.ty = null; const len = Math.hypot(W.input.x, W.input.y); vx = W.input.x / len; vy = (W.input.y / len) * vyScale; }
-    else if (m.tx != null) { const dx = m.tx - m.x, dy = m.ty - m.y, d = Math.hypot(dx, dy); if (d < 0.6) m.tx = m.ty = null; else { vx = dx / d; vy = dy / d; } }
-    m.moving = !!(vx || vy);
-    if (m.moving) {
-      m.x = clamp(m.x + vx * speed * dt, 4, c.w - 4); m.y = clamp(m.y + vy * speed * dt, c.top, c.bottom);
-      if (Math.abs(vx) > 0.05) m.dir = vx > 0 ? 1 : -1;
-      m.walk = (m.walk || 0) + dt * speed * 0.35;
+  /* ---------- Déplacements dans la ville ---------- */
+  function walkStep(m, speed, dt) {
+    const ox = m.x, oy = m.y;
+    if (m.path && m.path.length) {
+      const p = m.path[0], dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy), st = speed * dt;
+      if (d <= st) { m.x = p.x; m.y = p.y; m.path.shift(); } else { m.x += dx / d * st; m.y += dy / d * st; }
+      if (!m.path.length) m.path = null;
     }
+    const mx = m.x - ox, my = m.y - oy;
+    m.moving = Math.abs(mx) + Math.abs(my) > 1e-4;
+    if (m.moving) { if (Math.abs(mx) > 0.002) m.dir = mx > 0 ? 1 : -1; m.walk = (m.walk || 0) + Math.hypot(mx, my) * 2.2; }
   }
-  function collect(s, z, m, load, cap, reach, who, dt) {
-    const items = W.Z[z].items, yk = z === 'ground' ? 1.6 : 1;
-    for (let i = items.length - 1; i >= 0 && load.length < cap; i--) {
-      const it = items[i], dx = m.x - it.x, dy = m.y - it.y, d = Math.hypot(dx, dy * yk);
-      if (dt && d > reach && d <= reach * G.PULL) { const step = Math.min(d - reach * 0.6, 45 * dt) / d; it.x += dx * step; it.y += dy * step; it.pulled = true; }
-      if (Math.hypot(it.x - m.x, (it.y - m.y) * (z === 'ground' ? 1.6 : 1)) <= reach) { if (it.claim) it.claim.target = null; load.push(take(s, z, it, who)); if (load.length >= cap && who === 'me') emit('full', z); }
+  function playerMove(s, dt) {
+    const p = W.player, sp = W.walkSpeed(s);
+    if (s.view === 'ground' && (W.input.x || W.input.y)) {
+      p.path = null;
+      const len = Math.hypot(W.input.x, W.input.y), vx = W.input.x / len * sp * dt, vy = W.input.y / len * sp * dt;
+      const ox = p.x, oy = p.y;
+      if (C.freeAt(W.city, s, p.x + vx, p.y)) p.x += vx;
+      if (C.freeAt(W.city, s, p.x, p.y + vy)) p.y += vy;
+      p.moving = p.x !== ox || p.y !== oy;
+      if (Math.abs(vx) > 0.001) p.dir = vx > 0 ? 1 : -1;
+      if (p.moving) p.walk += Math.hypot(p.x - ox, p.y - oy) * 2.2;
+    } else walkStep(p, sp, dt);
+  }
+  function collectGround(s, dt) {
+    const p = W.player, items = W.Z.ground.items, cap = W.bagCap(s), reach = W.reach(s);
+    for (let i = items.length - 1; i >= 0 && s.bag.length < cap; i--) {
+      const it = items[i], dx = p.x - it.x, dy = p.y - it.y, d = Math.hypot(dx, dy);
+      if (d > reach && d <= reach * G.PULL) { const st = Math.min(d - reach * 0.6, 5 * dt) / d; it.x += dx * st; it.y += dy * st; }
+      if (d <= reach) { s.bag.push(take(s, 'ground', it, 'me')); if (s.bag.length >= cap) emit('full', 'ground'); }
     }
   }
   function dumpInto(s, z, load, dt, who) {
     const zz = W.Z[z], cap = W.contCap(s, z);
-    if (zz.launching > W.launchTime(s) - 0.8 || !load.length) return false;
+    if ((zz.launching > 0 && zz.launching > W.launchTime(s) - 0.8) || !load.length) return;
     zz.dump -= dt;
-    let moved = false;
     while (zz.dump <= 0 && load.length && s.cont[z].length < cap) {
-      s.cont[z].push(load.pop()); zz.dump += who === 'me' ? 0.05 : 0.02; moved = true; if (who === 'me') s.dumped++;
+      s.cont[z].push(load.pop()); zz.dump += who === 'me' ? 0.05 : 0.02;
+      if (who === 'me') s.dumped++;
       emit('dump', { z, who });
       if (s.cont[z].length >= cap) emit('contFull', z);
     }
     if (zz.dump < -0.2) zz.dump = 0;
-    return moved;
   }
 
-  /* ---------- Employés (éboueurs au sol, pilotes en orbite) ---------- */
+  /* ---------- Employés ---------- */
   function syncAgents(s, z) {
-    const want = Math.min(z === 'ground' ? s.team.collector : s.team.pilot, 30), list = W.Z[z].agents, c = G.ZONES[z];
-    while (list.length < want) list.push({ x: c.base + rnd(-3, 3), y: rnd(c.top + 2, c.bottom - 2), load: [], state: 'seek', target: null, dir: 1, walk: rnd(0, 6), hue: list.length });
+    const want = Math.min(z === 'ground' ? s.team.collector : s.team.pilot, 40), list = W.Z[z].agents;
+    while (list.length < want) list.push(z === 'ground'
+      ? { x: C.DEPOT.x + rnd(-1, 1), y: C.DEPOT.y + 1.6, load: [], state: 'seek', target: null, path: null, dir: 1, walk: rnd(0, 6), hue: list.length % 5, moving: false }
+      : { x: G.ZONES.orbit.base + rnd(-3, 3), y: rnd(30, 60), load: [], state: 'seek', target: null, dir: 1, walk: 0, hue: list.length });
     while (list.length > want) list.pop();
   }
-  function runAgents(s, z, dt) {
-    const c = G.ZONES[z], zz = W.Z[z], cap = z === 'ground' ? W.empCap(s) : W.pilotCap(s), speed = z === 'ground' ? W.empSpeed(s) : W.pilotSpeed(s), crew = s.crew[z];
+  function crewXp(s, z) { const crew = s.crew[z]; crew.xp++; if (crew.xp >= G.empXpNeed(crew.lvl)) { crew.xp = 0; crew.lvl++; emit('crewLevel', { z, lvl: crew.lvl }); } }
+  function runGroundAgents(s, dt) {
+    const zz = W.Z.ground, cap = W.empCap(s), speed = W.empSpeed(s);
     for (const a of zz.agents) {
       if (a.state === 'seek') {
-        if (a.load.length >= cap || (!zz.items.length && a.load.length)) { a.state = 'return'; if (a.target) a.target.claim = null; a.target = null; }
-        else {
-          if (!a.target || zz.items.indexOf(a.target) < 0) {
-            let best = null, bd = 1e9;
-            for (const it of zz.items) { if (it.claim && it.claim !== a) continue; const d = Math.abs(it.x - a.x) + Math.abs(it.y - a.y); if (d < bd) { bd = d; best = it; } }
-            a.target = best; if (best) best.claim = a;
-          }
-          if (a.target) {
-            const dx = a.target.x - a.x, dy = a.target.y - a.y, d = Math.hypot(dx, dy);
-            if (d < 1.3) { const k = take(s, z, a.target, 'crew'); a.load.push(k); a.target = null; crew.xp++; if (crew.xp >= G.empXpNeed(crew.lvl)) { crew.xp = 0; crew.lvl++; emit('crewLevel', { z, lvl: crew.lvl }); } }
-            else { a.x += dx / d * speed * dt; a.y += dy / d * speed * dt; a.dir = dx > 0 ? 1 : -1; a.walk += dt * speed * 0.35; }
-          }
+        if (a.load.length >= cap || (!zz.items.length && a.load.length)) { a.state = 'return'; if (a.target && a.target.claim === a) a.target.claim = null; a.target = null; a.path = null; continue; }
+        if (!a.target || zz.items.indexOf(a.target) < 0) {
+          let best = null, bd = 1e9;
+          for (const it of zz.items) { if (it.claim && it.claim !== a) continue; const d = Math.hypot(it.x - a.x, it.y - a.y); if (d < bd) { bd = d; best = it; } }
+          a.target = best; a.path = null; if (best) best.claim = a;
         }
+        const t = a.target;
+        if (!t) { a.moving = false; continue; }
+        if (Math.hypot(t.x - a.x, t.y - a.y) < 0.55) { a.load.push(take(s, 'ground', t, 'crew')); a.target = null; a.path = null; crewXp(s, 'ground'); continue; }
+        if (!a.path && pathBudget > 0) { pathBudget--; a.path = C.path(W.city, s, a.x, a.y, t.x, t.y) || [{ x: t.x, y: t.y }]; }
+        if (a.path) walkStep(a, speed, dt); else a.moving = false;
       } else {
-        const tx = c.base + 2, ty = z === 'ground' ? clamp(a.y, c.top, c.bottom) : c.baseY, dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy);
-        if (d > 2.5) { a.x += dx / d * speed * dt; a.y += dy / d * speed * dt; a.dir = dx > 0 ? 1 : -1; a.walk += dt * speed * 0.35; }
-        else { dumpInto(s, z, a.load, dt, 'crew'); if (!a.load.length) a.state = 'seek'; }
+        if (Math.hypot(C.DEPOT.x - a.x, C.DEPOT.y + 1.3 - a.y) > 1.3) {
+          if (!a.path && pathBudget > 0) { pathBudget--; a.path = C.path(W.city, s, a.x, a.y, C.DEPOT.x + rnd(-0.8, 0.8), C.DEPOT.y + 1.3) || [{ x: C.DEPOT.x, y: C.DEPOT.y + 1.3 }]; }
+          if (a.path) walkStep(a, speed, dt); else a.moving = false;
+        } else { a.moving = false; a.path = null; dumpInto(s, 'ground', a.load, dt, 'crew'); if (!a.load.length) a.state = 'seek'; }
+      }
+    }
+  }
+  function runOrbitAgents(s, dt) {
+    const c = G.ZONES.orbit, zz = W.Z.orbit, cap = W.pilotCap(s), speed = W.pilotSpeed(s);
+    for (const a of zz.agents) {
+      if (a.state === 'seek') {
+        if (a.load.length >= cap || (!zz.items.length && a.load.length)) { a.state = 'return'; if (a.target) a.target.claim = null; a.target = null; continue; }
+        if (!a.target || zz.items.indexOf(a.target) < 0) { let best = null, bd = 1e9; for (const it of zz.items) { if (it.claim && it.claim !== a) continue; const d = Math.abs(it.x - a.x) + Math.abs(it.y - a.y); if (d < bd) { bd = d; best = it; } } a.target = best; if (best) best.claim = a; }
+        const t = a.target; if (!t) continue;
+        const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy);
+        if (d < 1.3) { a.load.push(take(s, 'orbit', t, 'crew')); a.target = null; crewXp(s, 'orbit'); }
+        else { a.x += dx / d * speed * dt; a.y += dy / d * speed * dt; a.dir = dx > 0 ? 1 : -1; }
+      } else {
+        const dx = c.base + 2 - a.x, dy = c.baseY - a.y, d = Math.hypot(dx, dy);
+        if (d > 2.5) { a.x += dx / d * speed * dt; a.y += dy / d * speed * dt; a.dir = dx > 0 ? 1 : -1; }
+        else { dumpInto(s, 'orbit', a.load, dt, 'crew'); if (!a.load.length) a.state = 'seek'; }
       }
     }
   }
 
   /* ---------- Mise à jour ---------- */
   W.update = (s, dt) => {
-    s.playTime += dt;
+    s.playTime += dt; pathBudget = 3;
     if (s.frenzy > 0) s.frenzy = Math.max(0, s.frenzy - dt);
     for (const z of ['ground', 'orbit']) if (W.Z[z].launching > 0) W.Z[z].launching = Math.max(0, W.Z[z].launching - dt);
-    const gc = G.ZONES.ground, oc = G.ZONES.orbit;
-    steer(W.player, W.walkSpeed(s), dt, gc, s.view === 'ground', 0.6);
-    collect(s, 'ground', W.player, s.bag, W.bagCap(s), W.reach(s), 'me', dt);
-    if (Math.abs(W.player.x - gc.base) < 7) dumpInto(s, 'ground', s.bag, dt, 'me');
+    if (!s.awaitingTravel) {
+      const g = W.Z.ground; g.acc += W.spawnRate(s) * dt;
+      while (g.acc >= 1) { g.acc -= 1; if (g.items.length < W.mapCap(s)) spawnGround(s); }
+      if (s.ship) { const o = W.Z.orbit; o.acc += G.ORBIT_SPAWN * dt; while (o.acc >= 1) { o.acc -= 1; if (o.items.length < G.ZONES.orbit.visible) spawnOrbit(s); } }
+    }
+    playerMove(s, dt);
+    collectGround(s, dt);
+    if (Math.hypot(W.player.x - C.DEPOT.x, W.player.y - C.DEPOT.y) < 1.8) dumpInto(s, 'ground', s.bag, dt, 'me');
     if (s.ship) {
-      steer(W.ship, W.shipSpeed(s), dt, oc, s.view === 'orbit', 1);
-      collect(s, 'orbit', W.ship, s.hold, W.holdCap(s), W.shipReach(s), 'me', dt);
-      if (Math.hypot(W.ship.x - oc.base, W.ship.y - oc.baseY) < 9) dumpInto(s, 'orbit', s.hold, dt, 'me');
+      const oc = G.ZONES.orbit, sh = W.ship, sp = W.shipSpeed(s);
+      let vx = 0, vy = 0;
+      if (s.view === 'orbit' && (W.input.x || W.input.y)) { sh.tx = sh.ty = null; const len = Math.hypot(W.input.x, W.input.y); vx = W.input.x / len; vy = W.input.y / len; }
+      else if (sh.tx != null) { const dx = sh.tx - sh.x, dy = sh.ty - sh.y, d = Math.hypot(dx, dy); if (d < 0.6) sh.tx = sh.ty = null; else { vx = dx / d; vy = dy / d; } }
+      sh.moving = !!(vx || vy);
+      if (sh.moving) { sh.x = clamp(sh.x + vx * sp * dt, 4, oc.w - 4); sh.y = clamp(sh.y + vy * sp * dt, oc.top, oc.bottom); if (Math.abs(vx) > 0.05) sh.dir = vx > 0 ? 1 : -1; }
+      const items = W.Z.orbit.items, cap = W.holdCap(s), reach = W.shipReach(s);
+      for (let i = items.length - 1; i >= 0 && s.hold.length < cap; i--) {
+        const it = items[i], dx = sh.x - it.x, dy = sh.y - it.y, d = Math.hypot(dx, dy);
+        if (d > reach && d <= reach * G.PULL) { const st = Math.min(d - reach * 0.6, 30 * dt) / d; it.x += dx * st; it.y += dy * st; }
+        if (d <= reach) { s.hold.push(take(s, 'orbit', it, 'me')); if (s.hold.length >= cap) emit('full', 'orbit'); }
+      }
+      if (Math.hypot(sh.x - oc.base, sh.y - oc.baseY) < 9) dumpInto(s, 'orbit', s.hold, dt, 'me');
     }
+    syncAgents(s, 'ground'); runGroundAgents(s, dt);
+    if (s.ship) { syncAgents(s, 'orbit'); runOrbitAgents(s, dt); }
     for (const z of ['ground', 'orbit']) {
-      if (z === 'orbit' && !s.ship) continue;
-      syncAgents(s, z); runAgents(s, z, dt); fill(s, z, false);
-      const op = z === 'ground' ? s.team.operator : s.team.gunner, cap = W.contCap(s, z), cont = s.cont[z].length;
-      const idle = !W.Z[z].agents.some(a => a.load.length) && s.pools[z] <= 0;
-      if (op && cont && (cont >= Math.ceil(cap * (sk(s, 'proDriver') ? 0.5 : 1)) || idle)) W.launch(s, z, true);
+      const op = z === 'ground' ? s.team.operator : s.team.gunner, cont = s.cont[z].length;
+      if (!op || !cont || W.Z[z].launching > 0) continue;
+      const busy = W.Z[z].agents.some(a => a.load.length);
+      if (cont >= Math.ceil(W.contCap(s, z) * (sk(s, 'proDriver') ? 0.5 : 1)) || (!busy && s.playTime % 6 < dt)) W.launch(s, z, true);
     }
-    acc.t += dt;
     if (W.combo.n && s.playTime - W.combo.t > G.COMBO_WINDOW) { W.combo.n = 0; emit('comboEnd'); }
     W.checkMission(s);
+    acc.t += dt;
     if (acc.t >= 5) { s.rate.items = s.rate.items * 0.7 + 0.3 * acc.items / acc.t; s.rate.money = s.rate.money * 0.7 + 0.3 * acc.money / acc.t; acc = { items: 0, money: 0, t: 0 }; }
     checkClean(s);
   };
 
-  /* ---------- Hors ligne : l'équipe continue au rythme mesuré ---------- */
+  /* ---------- Hors ligne ---------- */
   W.offline = (s, secs) => {
-    const t = Math.min(secs, W.offlineCap(s)), poolsLeft = s.pools.ground + (s.ship ? s.pools.orbit : 0);
-    if (!(s.rate.items > 0) || !poolsLeft || s.awaitingTravel) return null;
-    const n = Math.min(Math.floor(s.rate.items * t), poolsLeft), money = Math.round(n * s.rate.money / s.rate.items);
-    const g = Math.round(n * s.pools.ground / poolsLeft);
-    s.pools.ground -= g; s.pools.orbit -= n - g;
-    s.money += money; s.moneyLife += money; s.sent += n; gainXp(s, n);
-    for (const z of ['ground', 'orbit']) { W.Z[z].items = []; fill(s, z, false); }
-    const stop = s.pools.ground <= 0;
-    if (stop) { s.cont.ground = []; s.bag = []; checkClean(s); }
+    if (!(s.rate.items > 0) || s.awaitingTravel) return null;
+    const t = Math.min(secs, W.offlineCap(s)), n = Math.min(Math.floor(s.rate.items * t), Math.ceil(s.pollution));
+    const money = Math.round(n * s.rate.money / s.rate.items);
+    s.money += money; s.moneyLife += money; s.sent += n; s.pollution -= n; gainXp(s, n);
+    const stop = s.pollution <= 0; checkClean(s);
     return { secs, n, money, stop };
   };
 
+  /* ---------- Missions et succès ---------- */
   W.mission = s => { const m = G.MISSIONS[s.mission]; return m ? { id: m.id, val: Math.min(m.need, m.val(s)), need: m.need, cash: Math.round(m.cash * G.planetValue(s.planet)) } : null; };
   W.checkMission = s => {
     const m = G.MISSIONS[s.mission];
@@ -299,16 +355,15 @@
   /* ---------- Sauvegarde ---------- */
   W.save = s => { s.last = Date.now(); try { localStorage.setItem(G.SAVE_KEY, JSON.stringify(s)); return true; } catch (e) { return false; } };
   W.revive = o => {
-    if (!o || o.v !== 3) return null;
+    if (!o || typeof o !== 'object') return null;
     const s = W.fresh();
-    for (const k of Object.keys(s)) if (o[k] !== undefined && typeof o[k] === typeof s[k] && !Array.isArray(s[k]) && typeof s[k] !== 'object') s[k] = o[k];
-    for (const k of ['pools', 'cont', 'gear', 'team', 'teamUps', 'crew', 'skills', 'tech', 'ach', 'rate', 'settings']) if (o[k] && typeof o[k] === 'object') s[k] = Object.assign(s[k], o[k]);
+    if (o.v !== 4) { if (o.settings) Object.assign(s.settings, o.settings); return s; }
+    for (const k of Object.keys(s)) if (o[k] !== undefined && typeof o[k] === typeof s[k] && (typeof s[k] !== 'object' || s[k] === null)) s[k] = o[k];
+    for (const k of ['districts', 'cont', 'gear', 'team', 'teamUps', 'crew', 'tree', 'ach', 'rate', 'settings']) if (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k])) s[k] = Object.assign(s[k], o[k]);
     for (const k of ['bag', 'hold']) if (Array.isArray(o[k])) s[k] = o[k];
-    if (o.pools === undefined && typeof o.remaining === 'number') { s.pools.ground = o.remaining; s.pools.orbit = G.planetItems(s.planet, 'orbit'); }
-    if (Array.isArray(o.cont)) s.cont = { ground: o.cont, orbit: [] };
-    if (o.lvl && typeof o.lvl === 'object') for (const k in o.lvl) if (k in s.gear) s.gear[k] = o.lvl[k];
     if (!Array.isArray(s.cont.ground)) s.cont.ground = [];
     if (!Array.isArray(s.cont.orbit)) s.cont.orbit = [];
+    s.tree.root = 1;
     return s;
   };
   W.load = () => { try { const raw = localStorage.getItem(G.SAVE_KEY); return raw ? W.revive(JSON.parse(raw)) : null; } catch (e) { return null; } };
