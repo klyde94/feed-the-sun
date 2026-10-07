@@ -146,7 +146,7 @@
   Wd.on('travel', () => R.fxTravel());
   Wd.on('salvage', r => { sfx('wreck'); toast(r.type === 'cargo' ? T('cargo', { m: fmt(r.money) }) : r.type === 'frenzy' ? T('frenzy', { s: r.secs }) : T('goldRain'), '', 'sun'); });
   Wd.on('jump', g => { R.fxJump(); sfx('clean'); toast(T('jumpToast', { g: roman(s.jumps + 1) }), T('jumpToastText', { n: g }), 'sun'); });
-  Wd.on('ach', id => { sfx('learn'); toast(T('achToast'), A(id)[0], 'ach'); });
+  Wd.on('ach', id => { sfx('learn'); const def = G.ACHIEVEMENTS.find(x => x.id === id); toast(T('achToast') + ' · ' + A(id)[0], def && def.outfit ? T('outfitToast', { name: T('outfit.' + def.outfit) }) : A(id)[1], 'ach'); });
 
   /* ---------- Commandes ---------- */
   const keys = new Set();

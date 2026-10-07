@@ -7,8 +7,8 @@ G.SAVE_KEY = 'feedthesun.v3.save';
 /* ---------- Ville (sol) ---------- */
 G.SPEED = 5.2;              // marche du joueur (tuiles/s)
 G.EMP_SPEED = 3.4;          // éboueurs
-G.SPAWN_BASE = 1.2;         // déchets qui apparaissent par seconde dans le centre-ville
-G.MAP_CAP = 60;             // déchets visibles au maximum par quartier ouvert
+G.SPAWN_BASE = 2.5;         // déchets qui apparaissent par seconde dans le centre-ville
+G.MAP_FILL = 0.08;          // la carte se remplit au plus à 8 % de déchets (moyenne visée : 5 à 10 %)
 G.FULL_BONUS = 1.1;         // conteneur plein : +10 %
 G.LAUNCH_TIME = 1.2;
 G.COMBO_WINDOW = 1.6;
@@ -39,11 +39,11 @@ G.DISTRICT_JUNK = {
 G.ORBIT_JUNK = [['bolt', 40], ['panel', 30], ['sat', 20], ['stage', 10]];
 G.GOLD_CHANCE = { ground: 0.014, orbit: 0.022 };
 G.GOLD_VALUE = 3;
-G.DISTRICT_COST = { north: 150, east: 1200, port: 6000 };
+G.DISTRICT_COST = { north: 450, east: 3600, port: 18000 };
 G.DISTRICT_SPAWN = { centre: 1, north: 0.8, east: 0.9, port: 1 };
 
 /* Pollution à éliminer (en déchets envoyés au soleil) : environ 30 à 60 min pour la première ville. */
-G.planetPollution = n => Math.round(9000 * Math.pow(2.4, n));
+G.planetPollution = n => Math.round(20000 * Math.pow(2.4, n));
 G.planetValue = n => Math.pow(1.7, n);
 G.JUMP_REQ = 3;
 G.CRYSTAL_BONUS = 0.1;
@@ -58,28 +58,28 @@ G.PLANETS = [
 
 /* ---------- Boutique (dollars) ---------- */
 G.GEAR = [
-  { id: 'bag', sec: 'me', base: 10, growth: 1.5, max: 25, eff: l => 8 + 3 * l },
-  { id: 'boots', sec: 'me', base: 15, growth: 1.6, max: 15, eff: l => 1 + 0.1 * l },
-  { id: 'magnet', sec: 'me', base: 30, growth: 1.7, max: 12, eff: l => 0.9 + 0.3 * l },
-  { id: 'container', sec: 'depot', base: 20, growth: 1.55, max: 25, eff: l => 24 + 12 * l },
-  { id: 'ramp', sec: 'depot', base: 60, growth: 1.7, max: 30, eff: l => 1 + 0.15 * l },
-  { id: 'sorting', sec: 'depot', base: 120, growth: 1.75, max: 30, eff: l => 1 + 0.2 * l },
-  { id: 'bins', sec: 'city', base: 50, growth: 1.6, max: 20, eff: l => 1 + 0.15 * l },
-  { id: 'hold', sec: 'ship', base: 600, growth: 1.6, max: 20, eff: l => 6 + 3 * l },
-  { id: 'thrust', sec: 'ship', base: 700, growth: 1.65, max: 15, eff: l => 1 + 0.12 * l },
-  { id: 'tractor', sec: 'ship', base: 900, growth: 1.7, max: 10, eff: l => 4 + 1.6 * l },
-  { id: 'cannon', sec: 'ship', base: 1200, growth: 1.75, max: 25, eff: l => 1 + 0.15 * l },
+  { id: 'bag', sec: 'me', base: 30, growth: 1.6, max: 10, eff: l => 8 + 3 * l },
+  { id: 'boots', sec: 'me', base: 45, growth: 1.6, max: 10, eff: l => 1 + 0.1 * l },
+  { id: 'magnet', sec: 'me', base: 90, growth: 1.7, max: 8, eff: l => 0.9 + 0.3 * l },
+  { id: 'container', sec: 'depot', base: 60, growth: 1.6, max: 10, eff: l => 24 + 12 * l },
+  { id: 'ramp', sec: 'depot', base: 180, growth: 1.55, max: 12, eff: l => 1 + 0.15 * l },
+  { id: 'sorting', sec: 'depot', base: 360, growth: 1.55, max: 12, eff: l => 1 + 0.2 * l },
+  { id: 'bins', sec: 'city', base: 150, growth: 1.6, max: 10, eff: l => 1 + 0.3 * l },
+  { id: 'hold', sec: 'ship', base: 600, growth: 1.6, max: 10, eff: l => 6 + 3 * l },
+  { id: 'thrust', sec: 'ship', base: 700, growth: 1.6, max: 10, eff: l => 1 + 0.12 * l },
+  { id: 'tractor', sec: 'ship', base: 900, growth: 1.7, max: 8, eff: l => 4 + 1.6 * l },
+  { id: 'cannon', sec: 'ship', base: 1200, growth: 1.55, max: 12, eff: l => 1 + 0.15 * l },
 ];
-G.SHIP_COST = 3000;
+G.SHIP_COST = 40000;
 G.HIRES = [
-  { id: 'collector', zone: 'ground', base: 40, growth: 1.42, max: 40 },
-  { id: 'operator', zone: 'ground', base: 250, growth: 1, max: 1 },
-  { id: 'pilot', zone: 'orbit', base: 1500, growth: 1.4, max: 20, needShip: true },
+  { id: 'collector', zone: 'ground', base: 120, growth: 1.22, max: 30 },
+  { id: 'operator', zone: 'ground', base: 750, growth: 1, max: 1 },
+  { id: 'pilot', zone: 'orbit', base: 1500, growth: 1.3, max: 15, needShip: true },
   { id: 'gunner', zone: 'orbit', base: 4000, growth: 1, max: 1, needShip: true },
 ];
 G.TEAM_UPS = [
-  { id: 'trolleys', base: 150, growth: 1.8, max: 8, eff: l => l },
-  { id: 'training', base: 200, growth: 1.7, max: 15, eff: l => 1 + 0.1 * l },
+  { id: 'trolleys', base: 450, growth: 1.7, max: 6, eff: l => l },
+  { id: 'training', base: 600, growth: 1.55, max: 10, eff: l => 1 + 0.06 * l },
 ];
 G.empXpNeed = lvl => Math.round(20 * Math.pow(lvl, 1.5));
 G.xpNeed = lvl => Math.round(30 * Math.pow(1.3, lvl - 1));
@@ -125,17 +125,29 @@ G.SUN = [
 ];
 
 G.ACH_BONUS = 0.02;
+/* 30 succès : 10 faciles, 10 moyens, 10 difficiles. Certains offrent une tenue pour l'éboueur. */
+const nTree = s => G.TREE.filter(n => n.id !== 'root' && s.tree[n.id]).length;
+const gearLv = s => G.GEAR.reduce((a, g) => a + s.gear[g.id], 0);
 G.ACHIEVEMENTS = [
-  { id: 'launch1', ok: s => s.sent >= 1 }, { id: 'sent100', ok: s => s.sent >= 100 }, { id: 'sent1k', ok: s => s.sent >= 1000 },
-  { id: 'sent10k', ok: s => s.sent >= 10000 }, { id: 'sent100k', ok: s => s.sent >= 100000 },
-  { id: 'hire1', ok: s => s.team.collector >= 1 }, { id: 'hire10', ok: s => s.team.collector >= 10 }, { id: 'operator', ok: s => s.team.operator >= 1 },
-  { id: 'district', ok: s => Object.keys(s.districts).length >= 2 }, { id: 'allDistricts', ok: s => Object.keys(s.districts).length >= 4 },
-  { id: 'ship', ok: s => s.ship }, { id: 'pilot1', ok: s => s.team.pilot >= 1 },
-  { id: 'lvl5', ok: s => s.level >= 5 }, { id: 'lvl15', ok: s => s.level >= 15 },
-  { id: 'gold1', ok: s => s.goldLife >= 1 }, { id: 'gold25', ok: s => s.goldLife >= 25 },
-  { id: 'planet1', ok: s => s.saved >= 1 }, { id: 'planet3', ok: s => s.saved >= 3 },
-  { id: 'wreck1', ok: s => s.wrecks >= 1 }, { id: 'jump1', ok: s => s.jumps >= 1 }, { id: 'sunYellow', ok: s => s.sent >= 1500 },
+  { id: 'launch1', tier: 1, ok: s => s.launches >= 1 }, { id: 'sent100', tier: 1, ok: s => s.sent >= 100 },
+  { id: 'hire1', tier: 1, ok: s => s.team.collector >= 1 }, { id: 'district', tier: 1, ok: s => Object.keys(s.districts).length >= 2 },
+  { id: 'combo5', tier: 1, ok: s => s.maxCombo >= 5 }, { id: 'gold1', tier: 1, ok: s => s.goldLife >= 1 },
+  { id: 'gear5', tier: 1, ok: s => gearLv(s) >= 5 }, { id: 'skill1', tier: 1, ok: s => nTree(s) >= 1 },
+  { id: 'wreck1', tier: 1, ok: s => s.wrecks >= 1 }, { id: 'sunOrange', tier: 1, ok: s => s.sent >= 150 },
+  { id: 'sent1k', tier: 2, ok: s => s.sent >= 1000 }, { id: 'hire10', tier: 2, ok: s => s.team.collector >= 10 },
+  { id: 'operator', tier: 2, ok: s => s.team.operator >= 1 }, { id: 'combo10', tier: 2, ok: s => s.maxCombo >= 10 },
+  { id: 'sunYellow', tier: 2, ok: s => s.sent >= 1500 }, { id: 'allDistricts', tier: 2, ok: s => Object.keys(s.districts).length >= 4 },
+  { id: 'gold25', tier: 2, ok: s => s.goldLife >= 25 }, { id: 'lvl10', tier: 2, ok: s => s.level >= 10 },
+  { id: 'full25', tier: 2, ok: s => s.fullLaunches >= 25 }, { id: 'halfway', tier: 2, ok: s => s.saved >= 1 || G.W.pollution(s) <= 0.5 },
+  { id: 'save1', tier: 3, outfit: 'goldcap', ok: s => s.saved >= 1 }, { id: 'save2', tier: 3, outfit: 'astro', ok: s => s.saved >= 2 },
+  { id: 'jump1', tier: 3, outfit: 'cape', ok: s => s.jumps >= 1 }, { id: 'allMax', tier: 3, ok: s => G.W.allMax(s) },
+  { id: 'treeFull', tier: 3, ok: s => nTree(s) >= G.TREE.length - 1 && G.TREE.every(n => n.type !== 'tech' || (s.tree[n.id] || 0) >= n.max) },
+  { id: 'team30', tier: 3, ok: s => s.team.collector >= 30 }, { id: 'sent100k', tier: 3, ok: s => s.sent >= 100000 },
+  { id: 'marathon', tier: 3, outfit: 'headband', ok: s => s.walked >= 10000 }, { id: 'fridges', tier: 3, outfit: 'chef', ok: s => s.fridges >= 100 },
+  { id: 'insomniac', tier: 3, outfit: 'nightcap', ok: s => s.insomniac },
 ];
+/* Tenues de l'éboueur (débloquées par certains succès) */
+G.OUTFITS = ['helmet', 'goldcap', 'astro', 'cape', 'headband', 'chef', 'nightcap'];
 
 /* ---------- Missions : une à la fois ---------- */
 G.MISSIONS = [

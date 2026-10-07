@@ -20,6 +20,7 @@
     crew: { ground: { xp: 0, lvl: 1 }, orbit: { xp: 0, lvl: 1 } },
     xp: 0, level: 1, skillPts: 0, techPts: 0, tree: { root: 1 }, goldLife: 0, wrecks: 0, ach: {},
     picked: 0, dumped: 0, launches: 0, orbitPicked: 0, mission: 0,
+    walked: 0, fridges: 0, maxCombo: 0, fullLaunches: 0, insomniac: false, outfit: 'helmet', outfits: { helmet: true },
     frenzy: 0, awaitingTravel: false, seenOrbit: false, playTime: 0, view: 'ground',
     rate: { items: 0, money: 0 }, settings: { lang: null, sound: true }, last: Date.now(),
   });
@@ -51,17 +52,19 @@
   W.shipSpeed = s => G.SHIP_SPEED * W.gearEff(s, 'thrust') * (sk(s, 'reactors') ? 1.25 : 1) * (1 + 0.08 * tl(s, 'ion')) * boost(s);
   W.reach = s => W.gearEff(s, 'magnet') * (sk(s, 'broom') ? 2 : 1) * (1 + 0.1 * tl(s, 'harpoon'));
   W.shipReach = s => W.gearEff(s, 'tractor') * (sk(s, 'debrisMagnet') ? 2 : 1) * (1 + 0.1 * tl(s, 'harpoon'));
-  const teamSpeed = s => (1 + 0.1 * s.teamUps.training) * (sk(s, 'teamSpirit') ? 1.25 : 1) * boost(s);
+  const teamSpeed = s => (1 + 0.06 * s.teamUps.training) * (sk(s, 'teamSpirit') ? 1.25 : 1) * boost(s);
   W.empCap = s => 5 + s.teamUps.trolleys + (sk(s, 'carts') ? 2 : 0) + tl(s, 'net');
   W.pilotCap = s => 5 + s.teamUps.trolleys + tl(s, 'arm');
-  W.empSpeed = s => G.EMP_SPEED * teamSpeed(s) * (1 + 0.05 * tl(s, 'vests')) * (1 + 0.04 * (s.crew.ground.lvl - 1));
+  W.empSpeed = s => G.EMP_SPEED * teamSpeed(s) * (1 + 0.04 * tl(s, 'vests')) * (1 + 0.02 * (s.crew.ground.lvl - 1));
   W.pilotSpeed = s => G.PILOT_SPEED * teamSpeed(s) * (sk(s, 'trainedPilots') ? 1.3 : 1) * (1 + 0.08 * tl(s, 'ion')) * (1 + 0.04 * (s.crew.orbit.lvl - 1));
   W.launchTime = s => G.LAUNCH_TIME * (1 - 0.15 * tl(s, 'laser'));
   W.goldChance = (s, z) => G.GOLD_CHANCE[z] * (sk(s, 'lynx') ? 2 : 1) * (1 + 0.15 * tl(s, 'prospect'));
   W.wreckInterval = s => 70 / (1 + 0.2 * tl(s, 'radar'));
   W.offlineCap = s => (sk(s, 'allNighter') ? 12 : 6) * 3600;
   W.spawnRate = s => { let r = 0; for (const d of DIST) if (s.districts[d]) r += G.DISTRICT_SPAWN[d]; return G.SPAWN_BASE * r * W.gearEff(s, 'bins'); };
-  W.mapCap = s => G.MAP_CAP * Object.keys(s.districts).length;
+  W.mapCap = s => { let n = 0; C.DISTRICTS.forEach((d, i) => { if (s.districts[d.id] && W.city) n += Math.round(W.city.spawns[i].length * G.MAP_FILL); }); return Math.max(20, n); };
+  W.allMax = s => G.GEAR.every(g => g.sec === 'ship' || s.gear[g.id] >= g.max) && DIST.every(d => s.districts[d]) && s.team.collector >= G.HIRES[0].max && s.team.operator >= 1 && G.TEAM_UPS.every(u => s.teamUps[u.id] >= u.max);
+  W.setOutfit = (s, id) => { if (s.outfits[id]) { s.outfit = id; emit('outfit', id); return true; } return false; };
   W.contValue = (s, z) => { let v = 0; for (const it of s.cont[z]) v += W.itemValue(s, z, it); return Math.round(v * (s.cont[z].length >= W.contCap(s, z) ? G.FULL_BONUS : 1)); };
 
   /* ---------- Boutique ---------- */
@@ -154,7 +157,7 @@
     let cash = 0;
     if (who === 'me') {
       W.combo.n = s.playTime - W.combo.t <= G.COMBO_WINDOW ? Math.min(G.COMBO_MAX, W.combo.n + 1) : 1; W.combo.t = s.playTime;
-      cash = W.itemValue(s, z, key) * G.COMBO_CASH * W.combo.n; s.money += cash; s.moneyLife += cash;
+      cash = W.itemValue(s, z, key) * G.COMBO_CASH * W.combo.n; s.money += cash; s.moneyLife += cash; if (W.combo.n > s.maxCombo) s.maxCombo = W.combo.n;
       if (z === 'ground') s.picked++; else s.orbitPicked++;
     }
     emit('pickup', { it, who, z, cash, combo: who === 'me' ? W.combo.n : 0 });
@@ -170,6 +173,8 @@
     const zz = W.Z[z], cont = s.cont[z];
     if (!cont.length || zz.launching > 0) return false;
     const n = cont.length, full = n >= W.contCap(s, z), money = W.contValue(s, z), kinds = cont.slice(0, 12);
+    for (const k of cont) if (k === 'fridge' || k === 'fridge*') s.fridges++;
+    if (full) s.fullLaunches++;
     s.money += money; s.moneyLife += money; s.sent += n; s.launches++; s.cont[z] = [];
     s.pollution -= n * (z === 'orbit' ? 2 : 1);
     zz.launching = W.launchTime(s);
@@ -205,6 +210,11 @@
     if (m.moving) { if (Math.abs(mx) > 0.002) m.dir = mx > 0 ? 1 : -1; m.walk = (m.walk || 0) + Math.hypot(mx, my) * 2.2; }
   }
   function playerMove(s, dt) {
+    const p = W.player, x0 = p.x, y0 = p.y;
+    movePlayer(s, dt);
+    s.walked += Math.hypot(p.x - x0, p.y - y0);
+  }
+  function movePlayer(s, dt) {
     const p = W.player, sp = W.walkSpeed(s);
     if (s.view === 'ground' && (W.input.x || W.input.y)) {
       p.path = null;
@@ -350,7 +360,10 @@
     s.money += cash; s.moneyLife += cash; s.mission++;
     emit('mission', { id: m.id, cash });
   };
-  W.checkAch = s => { for (const a of G.ACHIEVEMENTS) if (!s.ach[a.id] && a.ok(s)) { s.ach[a.id] = Date.now(); emit('ach', a.id); } };
+  W.checkAch = s => {
+    const h = new Date().getHours(); if (h >= 2 && h < 5) s.insomniac = true;
+    for (const a of G.ACHIEVEMENTS) if (!s.ach[a.id] && a.ok(s)) { s.ach[a.id] = Date.now(); if (a.outfit) s.outfits[a.outfit] = true; emit('ach', a.id); }
+  };
 
   /* ---------- Sauvegarde ---------- */
   W.save = s => { s.last = Date.now(); try { localStorage.setItem(G.SAVE_KEY, JSON.stringify(s)); return true; } catch (e) { return false; } };
@@ -359,7 +372,7 @@
     const s = W.fresh();
     if (o.v !== 4) { if (o.settings) Object.assign(s.settings, o.settings); return s; }
     for (const k of Object.keys(s)) if (o[k] !== undefined && typeof o[k] === typeof s[k] && (typeof s[k] !== 'object' || s[k] === null)) s[k] = o[k];
-    for (const k of ['districts', 'cont', 'gear', 'team', 'teamUps', 'crew', 'tree', 'ach', 'rate', 'settings']) if (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k])) s[k] = Object.assign(s[k], o[k]);
+    for (const k of ['districts', 'cont', 'gear', 'team', 'teamUps', 'crew', 'tree', 'ach', 'rate', 'settings', 'outfits']) if (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k])) s[k] = Object.assign(s[k], o[k]);
     for (const k of ['bag', 'hold']) if (Array.isArray(o[k])) s[k] = o[k];
     if (!Array.isArray(s.cont.ground)) s.cont.ground = [];
     if (!Array.isArray(s.cont.orbit)) s.cont.orbit = [];

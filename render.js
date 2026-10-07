@@ -55,11 +55,12 @@
   R.strip = k2 => (k2.endsWith('*') ? [k2.slice(0, -1), true] : [k2, false]);
 
   /* ---------- Personnage (partagé) ---------- */
-  R.drawPerson = (c2, x, y, d, dir, sw, vest, load, arm) => {
+  R.drawPerson = (c2, x, y, d, dir, sw, vest, load, arm, outfit) => {
     c2.fillStyle = 'rgba(0,0,0,0.28)'; c2.beginPath(); c2.ellipse(x, y, 2.2 * d, 0.8 * d, 0, 0, TAU); c2.fill();
     c2.save(); c2.translate(x, y); c2.scale(dir, 1);
     c2.strokeStyle = '#2c3140'; c2.lineWidth = 0.9 * d; c2.lineCap = 'round';
     c2.beginPath(); c2.moveTo(-0.5 * d, -4.2 * d); c2.lineTo(-0.5 * d + sw * 1.2 * d, 0); c2.moveTo(0.5 * d, -4.2 * d); c2.lineTo(0.5 * d - sw * 1.2 * d, 0); c2.stroke();
+    if (outfit === 'cape') { c2.fillStyle = '#6b3fb5'; c2.beginPath(); c2.moveTo(-1.2 * d, -8.6 * d); c2.lineTo(1.2 * d, -8.6 * d); c2.lineTo(2.2 * d - sw * 0.6 * d, -1.2 * d); c2.lineTo(-2.6 * d - sw * 0.6 * d, -1.2 * d); c2.closePath(); c2.fill(); c2.fillStyle = 'rgba(255,230,140,0.9)'; c2.fillRect(-0.3 * d, -5 * d, 0.6 * d, 0.6 * d); }
     const bs = (1.4 + load * 1.6) * d;
     c2.fillStyle = '#cfcab8'; c2.beginPath(); c2.ellipse(-1.6 * d - bs * 0.3, -6.4 * d, bs * 0.8, bs, 0, 0, TAU); c2.fill();
     c2.fillStyle = vest; c2.fillRect(-1.4 * d, -8.6 * d, 2.8 * d, 4.8 * d);
@@ -69,6 +70,11 @@
     c2.fillStyle = '#f1f3f7'; c2.beginPath(); c2.arc(0, -10 * d, 1.45 * d, 0, TAU); c2.fill();
     c2.fillStyle = '#1d2a3a'; c2.beginPath(); c2.ellipse(0.65 * d, -10 * d, 0.75 * d, 0.6 * d, 0, 0, TAU); c2.fill();
     c2.fillStyle = 'rgba(140,210,255,0.8)'; c2.fillRect(0.6 * d, -10.3 * d, 0.5 * d, 0.2 * d);
+    if (outfit === 'goldcap') { c2.fillStyle = '#f2c14e'; c2.beginPath(); c2.arc(0, -10.3 * d, 1.5 * d, Math.PI, TAU); c2.fill(); c2.fillRect(0, -10.6 * d, 2.4 * d, 0.45 * d); c2.fillStyle = '#fff1b8'; c2.fillRect(-0.2 * d, -11.6 * d, 0.4 * d, 0.4 * d); }
+    else if (outfit === 'astro') { c2.strokeStyle = 'rgba(200,235,255,0.9)'; c2.lineWidth = 0.35 * d; c2.fillStyle = 'rgba(160,220,255,0.18)'; c2.beginPath(); c2.arc(0, -10 * d, 2.2 * d, 0, TAU); c2.fill(); c2.stroke(); c2.fillStyle = 'rgba(255,255,255,0.7)'; c2.fillRect(-1.2 * d, -11.4 * d, 0.6 * d, 0.3 * d); c2.fillStyle = '#d9dde8'; c2.fillRect(-1.4 * d, -8.2 * d, 2.8 * d, 0.5 * d); }
+    else if (outfit === 'headband') { c2.fillStyle = '#e8453c'; c2.fillRect(-1.5 * d, -11 * d, 3 * d, 0.55 * d); c2.fillRect(-2.2 * d, -10.9 * d, 0.8 * d, 0.3 * d); }
+    else if (outfit === 'chef') { c2.fillStyle = '#ffffff'; c2.fillRect(-1.1 * d, -13.6 * d, 2.2 * d, 2.6 * d); c2.beginPath(); c2.arc(-0.6 * d, -13.6 * d, 0.9 * d, 0, TAU); c2.arc(0.6 * d, -13.6 * d, 0.9 * d, 0, TAU); c2.fill(); c2.fillStyle = '#d8d8d8'; c2.fillRect(-1.2 * d, -11.4 * d, 2.4 * d, 0.4 * d); }
+    else if (outfit === 'nightcap') { c2.fillStyle = '#3d5bd9'; c2.beginPath(); c2.moveTo(-1.5 * d, -10.6 * d); c2.lineTo(1.5 * d, -10.6 * d); c2.quadraticCurveTo(0.5 * d, -13.5 * d, -2.6 * d, -12.4 * d); c2.closePath(); c2.fill(); c2.fillStyle = '#ffffff'; c2.beginPath(); c2.arc(-2.6 * d, -12.4 * d, 0.55 * d, 0, TAU); c2.fill(); c2.fillRect(-1.6 * d, -10.9 * d, 3.2 * d, 0.45 * d); }
     c2.restore();
   };
 
@@ -257,7 +263,7 @@
     for (const a of z.agents) list.push({ y: a.y, f: () => R.drawPerson(ctx, sx(a.x), sy(a.y), T / 11, a.dir, a.moving ? Math.sin(a.walk) : 0, VESTS[a.hue], a.load.length / Wd.empCap(s), 0) });
     list.push({ y: p.y + 0.01, f: () => {
       const cap = Wd.bagCap(s), x = sx(p.x), y = sy(p.y);
-      R.drawPerson(ctx, x, y - (p.moving ? Math.abs(Math.cos(p.walk)) * T * 0.04 : 0), T / 9.5, p.dir, p.moving ? Math.sin(p.walk) : 0, '#ff8a2a', s.bag.length / cap, 0);
+      R.drawPerson(ctx, x, y - (p.moving ? Math.abs(Math.cos(p.walk)) * T * 0.04 : 0), T / 9.5, p.dir, p.moving ? Math.sin(p.walk) : 0, '#ff8a2a', s.bag.length / cap, 0, s.outfit);
       if (s.bag.length) {
         const n = Math.min(cap, 20), w = Math.min(T * 1.6, n * T * 0.13), x0 = x - w / 2;
         for (let i = 0; i < n; i++) { ctx.fillStyle = i < s.bag.length * n / cap ? (s.bag.length >= cap ? '#ffd36b' : '#ece6d9') : 'rgba(255,255,255,0.25)'; ctx.fillRect(x0 + (i / n) * w, y - T * 1.35, Math.max(2, w / n - 1.5), T * 0.08); }

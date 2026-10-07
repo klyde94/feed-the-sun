@@ -139,10 +139,25 @@
       if (dl.children.length !== rows.length * 2) { dl.innerHTML = ''; rows.forEach(() => dl.append(el('dt'), el('dd'))); }
       rows.forEach(([k2, v], i) => { dl.children[i * 2].textContent = k2; dl.children[i * 2 + 1].textContent = v; });
     });
+    const wr = sec(T('wardrobe')); wr.append(el('p', 'muted small', T('wardrobeNote')));
+    const wg = el('div', 'wardrobe');
+    G.OUTFITS.forEach(id => {
+      const own = !!s.outfits[id], c = el('button', 'outfit' + (s.outfit === id ? ' is-on' : '') + (own ? '' : ' is-locked')); c.type = 'button'; c.disabled = !own;
+      const cv = el('canvas', 'outfit-cv'); cv.width = 120; cv.height = 140;
+      const g2 = cv.getContext('2d'); G.R.drawPerson(g2, 60, 130, 9.5, 1, 0, own ? '#ff8a2a' : '#555b6b', 0.3, 0, id);
+      c.append(cv, el('span', 'outfit-name', T('outfit.' + id)), el('span', 'outfit-state', s.outfit === id ? T('worn') : own ? T('wear') : T('lockedOutfit')));
+      c.onclick = () => { if (Wd.setOutfit(s, id)) { U().sfx('buy'); P.render(true); } };
+      wg.append(c);
+    });
+    wr.append(wg);
     const a = sec(T('achTitle')); a.append(el('p', 'muted small', T('achHead', { n: Wd.achCount(s), m: G.ACHIEVEMENTS.length, p: Math.round(Wd.achCount(s) * G.ACH_BONUS * 100) })));
-    const grid = el('div', 'ach-grid');
-    G.ACHIEVEMENTS.forEach(x => { const [n, d] = U().A(x.id), c = el('div', 'ach' + (s.ach[x.id] ? ' got' : '')); c.append(el('div', 'ach-name', n), el('div', 'ach-desc', d)); grid.append(c); });
-    a.append(grid);
+    [1, 2, 3].forEach(tier => {
+      const list = G.ACHIEVEMENTS.filter(x => x.tier === tier), got = list.filter(x => s.ach[x.id]).length;
+      a.append(el('div', 'ach-tier tier' + tier, T('tier' + tier) + ' · ' + got + '/' + list.length));
+      const grid = el('div', 'ach-grid');
+      list.forEach(x => { const [n, d] = U().A(x.id), c = el('div', 'ach' + (s.ach[x.id] ? ' got' : '')); c.append(el('div', 'ach-name', n), el('div', 'ach-desc', d)); if (x.outfit) c.append(el('div', 'ach-reward', '★ ' + T('outfit.' + x.outfit))); grid.append(c); });
+      a.append(grid);
+    });
     const row2 = el('div', 'btn-row');
     [['oldVersion', 'https://klyde94.github.io/feed-the-sun/v2/'], ['plan', 'https://klyde94.github.io/feed-the-sun/plan.html']].forEach(([k, href]) => { const x = el('a', 'btn btn-ghost', T(k)); x.href = href; x.target = '_blank'; x.rel = 'noopener'; row2.append(x); });
     sec(T('version')).append(row2);
@@ -156,7 +171,7 @@
     const base = U().lang() + '|';
     if (tab === 'shop') return base + [s.ship, s.jumps, s.launches >= 1, s.team.collector >= 1, s.team.collector >= 3, s.saved, Wd.canJump(s), s.team.pilot >= 1].join();
     if (tab === 'tree') return base + 'tree';
-    return base + s.settings.sound + U().canInstall() + Wd.achCount(s);
+    return base + s.settings.sound + U().canInstall() + Wd.achCount(s) + s.outfit + Object.keys(s.outfits).length;
   }
   P.render = force => {
     const tab = U().tab(); if (!tab) return;
