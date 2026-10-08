@@ -299,7 +299,10 @@
     for (const k of Wd.dirty) { if (budget-- <= 0) break; Wd.dirty.delete(k); if (chunks.has(k)) buildChunk(pl, k & 255, k >> 8); }
     sunFlash = Math.max(0, sunFlash - dt * 1.2); celebrate = Math.max(0, celebrate - dt * 0.5); shake = Math.max(0, shake - dt * 2);
     const vw = W / T, vh = H / T, p = Wd.player;
-    camX = lerp(camX, clamp(p.x - vw / 2, 0, Math.max(0, P.W - vw)), Math.min(1, dt * 6)); camY = lerp(camY, clamp(p.y - vh / 2, 0, Math.max(0, P.H - vh)), Math.min(1, dt * 6));
+    const cx = clamp(p.x - vw / 2, 0, Math.max(0, P.W - vw)), cy = clamp(p.y - vh / 2, 0, Math.max(0, P.H - vh));
+    // caméra posée directement sur le hippie au chargement (ou après un grand saut), puis elle le suit en douceur
+    if (Math.abs(cx - camX) > vw * 0.6 || Math.abs(cy - camY) > vh * 0.6) { camX = cx; camY = cy; }
+    else { camX = lerp(camX, cx, Math.min(1, dt * 6)); camY = lerp(camY, cy, Math.min(1, dt * 6)); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#0b0d12'; ctx.fillRect(0, 0, W, H);
     if (shake > 0) ctx.translate(rnd(-1, 1) * shake * 4, rnd(-1, 1) * shake * 4);
