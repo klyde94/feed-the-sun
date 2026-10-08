@@ -26,10 +26,10 @@
   let ac = null; const lastSfx = {};
   function sfx(type) {
     if (!s || !s.settings.sound) return;
-    const now = performance.now(); if (now - (lastSfx[type] || 0) < (type === 'suck' ? 110 : 60)) return; lastSfx[type] = now;
+    const now = performance.now(); if (now - (lastSfx[type] || 0) < 60) return; lastSfx[type] = now;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-      const p = { suck: [180, 140, 0.05, 0.012, 'sawtooth'], pickup: [600, 900, 0.07, 0.03, 'sine'], combo: [700, 1100, 0.08, 0.035, 'sine'], dump: [220, 160, 0.06, 0.035, 'triangle'], launch: [120, 520, 0.7, 0.05, 'sawtooth'],
+      const p = { pickup: [600, 900, 0.07, 0.03, 'sine'], combo: [700, 1100, 0.08, 0.035, 'sine'], dump: [220, 160, 0.06, 0.035, 'triangle'], launch: [120, 520, 0.7, 0.05, 'sawtooth'],
         buy: [520, 780, 0.09, 0.04, 'sine'], full: [440, 330, 0.18, 0.035, 'square'], clean: [330, 660, 0.9, 0.07, 'sine'], sun: [220, 440, 1.2, 0.06, 'sine'],
         gold: [880, 1320, 0.25, 0.05, 'sine'], level: [440, 880, 0.5, 0.06, 'triangle'], learn: [660, 990, 0.3, 0.05, 'sine'], hire: [392, 523, 0.25, 0.05, 'triangle'],
         wreck: [990, 1480, 0.3, 0.05, 'sine'], open: [300, 420, 0.08, 0.03, 'sine'] }[type];
@@ -60,7 +60,7 @@
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (tab === 'opt') P.render(true); });
   const canInstall = () => !!deferredInstall;
   const install = () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(() => { deferredInstall = null; P.render(true); }); };
-  if ('serviceWorker' in navigator && location.protocol === 'https:' && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && /github\.io$/.test(location.hostname)) Promise.resolve().catch(() => {});
 
   G.U = { T, fmt, fmtNum, fmtTime, roman, A, sfx, toast, modal, state: () => s, tab: () => tab, lang: () => lang, setLang: k => setLang(k), canInstall, install,
     reset: () => { Wd.wipe(); s = Wd.fresh(); s.settings.lang = lang; Wd.reset(s); closeSheet(); afterLoad(); } };
@@ -109,13 +109,8 @@
     lastStage = stage;
     document.documentElement.style.setProperty('--sun', 'rgb(' + R.sunColor().join(',') + ')');
     $('pollTxt').textContent = (poll > 0 && poll < 1 ? loc(poll.toFixed(1)) : Math.ceil(poll)) + ' %'; $('pollBar').style.width = poll + '%';
-    const cc = Wd.contCap(s, z), cont = Wd.contLen(s, z), lb = $('launchBtn');
-    lb.disabled = !cont || Wd.Z[z].launching > 0; lb.classList.toggle('is-full', cont >= cc - 0.5);
-    const det = $('detector'), nd = Wd.pl && Wd.pl.needle;
-    if (det && nd) {
-      det.hidden = z !== 'ground' || nd.state === 'taken' || s.mission < 6;
-      if (!det.hidden) { const d = nd.state === 'visible' ? 0 : Math.hypot(Wd.player.x - (nd.cx + 0.5) / G.PLANET.CPT, Wd.player.y - (nd.cy + 0.5) / G.PLANET.CPT); const k = nd.state === 'visible' ? 'detSeen' : d < 4 ? 'detHot' : d < 9 ? 'detWarm' : d < 18 ? 'detTepid' : 'detCold'; det.textContent = T('detector') + ' · ' + T(k); det.dataset.heat = k; }
-    }
+    const cc = Wd.contCap(s, z), cont = s.cont[z].length, lb = $('launchBtn');
+    lb.disabled = !cont || Wd.Z[z].launching > 0; lb.classList.toggle('is-full', cont >= cc);
     lb.querySelector('span').textContent = T('launch') + (cont ? ' · ' + fmt(Wd.contValue(s, z)) + ' $' : '');
     $('viewSeg').hidden = !s.ship;
     $('viewGround').classList.toggle('is-on', z === 'ground'); $('viewOrbit').classList.toggle('is-on', z === 'orbit');
@@ -131,12 +126,7 @@
   }
 
   /* ---------- Événements du moteur ---------- */
-  Wd.on('pickup', e => { if (e.who === 'me') sfx('pickup'); });
-  Wd.on('suck', e => { R.fxSuck(e); sfx('suck'); });
-  Wd.on('combo', n => { R.fxCombo(n); sfx('combo'); });
-  Wd.on('crane', e => { if (s.view === 'ground') R.fxCrane(e); });
-  Wd.on('needleSeen', () => { sfx('gold'); toast(T('needleSeen'), T('needleSeenText'), 'sun'); });
-  Wd.on('needle', e => { R.fxNeedle(); sfx('clean'); toast(T('needleTitle', { item: T('needle.' + e.item) }), T('needleText', { m: fmt(e.cash) }), 'sun'); });
+  Wd.on('pickup', e => { if (e.who === 'me') { R.fxPickup(e); sfx(e.combo >= 3 ? 'combo' : 'pickup'); if (e.z === 'ground') R.fxCombo(e.combo); } });
   Wd.on('mission', e => { sfx('level'); toast(T('missionDone') + (e.cash ? ' · +' + fmt(e.cash) + ' $' : ''), T('mission.' + e.id, { n: (G.MISSIONS.find(m => m.id === e.id) || {}).need }), 'ach'); if (tab) P.render(true); });
   Wd.on('full', () => sfx('full'));
   Wd.on('dump', e => { R.fxDump(e); if (e.who === 'me') sfx('dump'); });

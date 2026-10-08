@@ -367,16 +367,3 @@ a.btn { text-decoration: none; display: inline-block; }
 .ach-tier { font: 11px var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 8px; color: var(--mute); }
 .ach-tier.tier1 { color: var(--clean); } .ach-tier.tier2 { color: #8fd0ff; } .ach-tier.tier3 { color: var(--sun); }
 .ach-reward { font: 10.5px var(--font-data); color: var(--sun); margin-top: 2px; }
-
-.detector { margin-top: 8px; display: inline-block; font: 600 12px var(--font-data); padding: 6px 10px; border-radius: 10px; background: rgba(8, 10, 16, 0.78); border: 1px solid rgba(255, 255, 255, 0.1); text-shadow: none; }
-.detector[data-heat="detCold"] { color: #8fd0ff; }
-.detector[data-heat="detTepid"] { color: #c9e3a0; }
-.detector[data-heat="detWarm"] { color: #ffb45a; }
-.detector[data-heat="detHot"], .detector[data-heat="detSeen"] { color: #ff6b5a; border-color: #ff6b5a; }
-
-/* v4.1 : téléphone, le bouton Lancer passe au-dessus des trois boutons, les messages ne cachent plus la mission */
-@media (max-width: 520px) {
-  .fire { bottom: 78px; }
-  .toasts { top: auto; bottom: 150px; }
-  .detector { font-size: 11px; padding: 5px 8px; }
-}

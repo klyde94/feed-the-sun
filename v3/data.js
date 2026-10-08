@@ -1,29 +1,20 @@
 'use strict';
-/* Feed the Sun v4 — réglages du jeu. Textes : i18n.js. Planètes ensevelies : planet.js. */
+/* Feed the Sun v3 — réglages du jeu. Textes affichés : i18n.js. La ville se mesure en tuiles (city.js). */
 const G = (window.FTS3 = window.FTS3 || {});
 
-G.SAVE_KEY = 'feedthesun.v4.save';
+G.SAVE_KEY = 'feedthesun.v3.save';
 
-/* ---------- Au sol ---------- */
-G.SPEED = 5;                // marche du hippie (tuiles/s)
-G.UNIT_VALUE = 0.3;
-G.TRASH_K = 2.5;            // épaisseur des tas de déchets         // dollars par déchet aspiré (avant bonus)
-G.FULL_BONUS = 1.1;
+/* ---------- Ville (sol) ---------- */
+G.SPEED = 5.2;              // marche du joueur (tuiles/s)
+G.EMP_SPEED = 3.4;          // éboueurs
+G.SPAWN_BASE = 2.5;         // déchets qui apparaissent par seconde dans le centre-ville
+G.MAP_FILL = 0.08;          // la carte se remplit au plus à 8 % de déchets (moyenne visée : 5 à 10 %)
+G.FULL_BONUS = 1.1;         // conteneur plein : +10 %
 G.LAUNCH_TIME = 1.2;
-G.COMBO_WINDOW = 1.2;       // secondes sans aspirer avant de perdre le combo
+G.COMBO_WINDOW = 1.6;
 G.COMBO_MAX = 10;
-G.COMBO_STEP = 25;          // déchets aspirés d'affilée pour gagner un cran de combo
-G.COMBO_CASH = 0.06;        // chaque déchet aspiré rapporte tout de suite 6 % de sa valeur × combo
-G.GOLD_POINTS = 1;
-G.NEEDLE_CASH = 60;         // l'objet rare rapporte 60 secondes de production (au moins 500 $)
-G.CLEAN_DONE = 0.01;        // sous 1 % de déchets, la planète est considérée comme sauvée
-
-/* ---------- Machines ---------- */
-G.MACHINES = {
-  robot: { speed: 2.6, rad: 0.7, rate: 4, tank: 40 },
-  dozer: { speed: 1.7, rad: 1.5, rate: 12, tank: 160 },
-  crane: { speed: 1.2, rad: 2.6, rate: 0, tank: 320, every: 7 },
-};
+G.COMBO_CASH = 0.08;        // chaque ramassage rapporte tout de suite 8 % de sa valeur × combo
+G.PULL = 2.2;               // aspiration des déchets proches (× la portée)
 
 /* ---------- Orbite (vue de côté, unités : la scène fait 100 de haut) ---------- */
 G.ZONES = { orbit: { w: 220, base: 22, baseY: 60, top: 16, bottom: 68, visible: 26, spawnMin: 40 } };
@@ -38,11 +29,22 @@ G.JUNK = {
   bolt: { value: 4, size: 1.6, col: [170, 176, 190] }, panel: { value: 8, size: 2.8, col: [70, 92, 150] },
   sat: { value: 14, size: 2.6, col: [160, 176, 200] }, stage: { value: 22, size: 3, col: [206, 202, 192] },
 };
+/* Chaque quartier a ses déchets : l'est et le port donnent des objets plus lourds, qui rapportent plus. */
+G.DISTRICT_JUNK = {
+  centre: [['bag', 32], ['can', 26], ['bottle', 22], ['tire', 10], ['barrel', 6], ['fridge', 4]],
+  north: [['bag', 26], ['can', 20], ['bottle', 18], ['tire', 16], ['barrel', 12], ['fridge', 8]],
+  east: [['bag', 16], ['can', 14], ['bottle', 12], ['tire', 22], ['barrel', 20], ['fridge', 16]],
+  port: [['bag', 8], ['can', 8], ['bottle', 8], ['tire', 22], ['barrel', 30], ['fridge', 24]],
+};
 G.ORBIT_JUNK = [['bolt', 40], ['panel', 30], ['sat', 20], ['stage', 10]];
-G.GOLD_CHANCE = { orbit: 0.022 };
+G.GOLD_CHANCE = { ground: 0.014, orbit: 0.022 };
 G.GOLD_VALUE = 3;
+G.DISTRICT_COST = { north: 450, east: 3600, port: 18000 };
+G.DISTRICT_SPAWN = { centre: 1, north: 0.8, east: 0.9, port: 1 };
 
-G.planetValue = n => Math.pow(1.8, n);
+/* Pollution à éliminer (en déchets envoyés au soleil) : environ 30 à 60 min pour la première ville. */
+G.planetPollution = n => Math.round(20000 * Math.pow(2.4, n));
+G.planetValue = n => Math.pow(1.7, n);
 G.JUMP_REQ = 3;
 G.CRYSTAL_BONUS = 0.1;
 
@@ -56,34 +58,34 @@ G.PLANETS = [
 
 /* ---------- Boutique (dollars) ---------- */
 G.GEAR = [
-  { id: 'tank', sec: 'me', base: 25, growth: 1.6, max: 10, eff: l => 40 + 25 * l },
-  { id: 'power', sec: 'me', base: 35, growth: 1.6, max: 10, eff: l => 14 + 7 * l },
-  { id: 'nozzle', sec: 'me', base: 60, growth: 1.7, max: 8, eff: l => 1 + 0.22 * l },
-  { id: 'boots', sec: 'me', base: 40, growth: 1.6, max: 10, eff: l => 1 + 0.08 * l },
-  { id: 'container', sec: 'van', base: 50, growth: 1.6, max: 10, eff: l => 160 + 90 * l },
-  { id: 'ramp', sec: 'van', base: 150, growth: 1.55, max: 12, eff: l => 1 + 0.15 * l },
-  { id: 'sorting', sec: 'van', base: 300, growth: 1.55, max: 12, eff: l => 1 + 0.2 * l },
-  { id: 'motors', sec: 'machines', base: 400, growth: 1.6, max: 10, eff: l => 1 + 0.08 * l },
-  { id: 'tanks', sec: 'machines', base: 500, growth: 1.6, max: 8, eff: l => 1 + 0.2 * l },
-  { id: 'turbo', sec: 'machines', base: 600, growth: 1.6, max: 10, eff: l => 1 + 0.15 * l },
+  { id: 'bag', sec: 'me', base: 30, growth: 1.6, max: 10, eff: l => 8 + 3 * l },
+  { id: 'boots', sec: 'me', base: 45, growth: 1.6, max: 10, eff: l => 1 + 0.1 * l },
+  { id: 'magnet', sec: 'me', base: 90, growth: 1.7, max: 8, eff: l => 0.9 + 0.3 * l },
+  { id: 'container', sec: 'depot', base: 60, growth: 1.6, max: 10, eff: l => 24 + 12 * l },
+  { id: 'ramp', sec: 'depot', base: 180, growth: 1.55, max: 12, eff: l => 1 + 0.15 * l },
+  { id: 'sorting', sec: 'depot', base: 360, growth: 1.55, max: 12, eff: l => 1 + 0.2 * l },
+  { id: 'bins', sec: 'city', base: 150, growth: 1.6, max: 10, eff: l => 1 + 0.3 * l },
   { id: 'hold', sec: 'ship', base: 600, growth: 1.6, max: 10, eff: l => 6 + 3 * l },
   { id: 'thrust', sec: 'ship', base: 700, growth: 1.6, max: 10, eff: l => 1 + 0.12 * l },
   { id: 'tractor', sec: 'ship', base: 900, growth: 1.7, max: 8, eff: l => 4 + 1.6 * l },
   { id: 'cannon', sec: 'ship', base: 1200, growth: 1.55, max: 12, eff: l => 1 + 0.15 * l },
 ];
-G.SHIP_COST = 300000;
+G.SHIP_COST = 40000;
 G.HIRES = [
-  { id: 'robot', zone: 'ground', base: 150, growth: 1.35, max: 20 },
-  { id: 'launcher', zone: 'ground', base: 600, growth: 1, max: 1 },
-  { id: 'dozer', zone: 'ground', base: 3000, growth: 1.5, max: 8, after: 'robot', need: 5 },
-  { id: 'crane', zone: 'ground', base: 20000, growth: 1.8, max: 4, after: 'dozer', need: 3 },
+  { id: 'collector', zone: 'ground', base: 120, growth: 1.22, max: 30 },
+  { id: 'operator', zone: 'ground', base: 750, growth: 1, max: 1 },
   { id: 'pilot', zone: 'orbit', base: 1500, growth: 1.3, max: 15, needShip: true },
   { id: 'gunner', zone: 'orbit', base: 4000, growth: 1, max: 1, needShip: true },
 ];
-G.empXpNeed = lvl => Math.round(60 * Math.pow(lvl, 1.5));
-G.xpNeed = lvl => Math.round(120 * Math.pow(1.3, lvl - 1));
+G.TEAM_UPS = [
+  { id: 'trolleys', base: 450, growth: 1.7, max: 6, eff: l => l },
+  { id: 'training', base: 600, growth: 1.55, max: 10, eff: l => 1 + 0.06 * l },
+];
+G.empXpNeed = lvl => Math.round(20 * Math.pow(lvl, 1.5));
+G.xpNeed = lvl => Math.round(30 * Math.pow(1.3, lvl - 1));
 
-/* ---------- Le grand arbre : compétences (points de niveau) et technologies (objets dorés) ---------- */
+/* ---------- Le grand arbre : compétences (points de niveau) et technologies (ordures dorées) ----------
+   x, y : position dans l'arbre (0, 0 = racine). parent : nœud à posséder avant. */
 G.TREE = [
   { id: 'root', x: 0, y: 0 },
   { id: 'pockets', type: 'skill', cost: 1, parent: 'root', x: 0, y: -150 },
@@ -117,57 +119,57 @@ G.TREE = [
 G.techCost = lvl => 1 + lvl;
 
 G.SUN = [
-  { at: 0, k: 3200, rgb: [255, 98, 66] }, { at: 3000, k: 4600, rgb: [255, 150, 74] }, { at: 30000, k: 5800, rgb: [255, 212, 118] },
-  { at: 200000, k: 7200, rgb: [255, 238, 200] }, { at: 1.2e6, k: 9800, rgb: [236, 242, 255] }, { at: 6e6, k: 21000, rgb: [168, 198, 255] },
-  { at: 3e7, k: 42000, rgb: [126, 158, 255] }, { at: 2e8, k: 90000, rgb: [196, 140, 255] },
+  { at: 0, k: 3200, rgb: [255, 98, 66] }, { at: 150, k: 4600, rgb: [255, 150, 74] }, { at: 1500, k: 5800, rgb: [255, 212, 118] },
+  { at: 12000, k: 7200, rgb: [255, 238, 200] }, { at: 80000, k: 9800, rgb: [236, 242, 255] }, { at: 500000, k: 21000, rgb: [168, 198, 255] },
+  { at: 3e6, k: 42000, rgb: [126, 158, 255] }, { at: 2e7, k: 90000, rgb: [196, 140, 255] },
 ];
 
-/* ---------- 30 succès : 10 faciles, 10 moyens, 10 difficiles ---------- */
 G.ACH_BONUS = 0.02;
+/* 30 succès : 10 faciles, 10 moyens, 10 difficiles. Certains offrent une tenue pour l'éboueur. */
 const nTree = s => G.TREE.filter(n => n.id !== 'root' && s.tree[n.id]).length;
 const gearLv = s => G.GEAR.reduce((a, g) => a + s.gear[g.id], 0);
 G.ACHIEVEMENTS = [
-  { id: 'launch1', tier: 1, ok: s => s.launches >= 1 }, { id: 'sent100', tier: 1, ok: s => s.sent >= 1000 },
-  { id: 'hire1', tier: 1, ok: s => s.team.robot >= 1 }, { id: 'district', tier: 1, ok: s => s.team.dozer >= 1 },
+  { id: 'launch1', tier: 1, ok: s => s.launches >= 1 }, { id: 'sent100', tier: 1, ok: s => s.sent >= 100 },
+  { id: 'hire1', tier: 1, ok: s => s.team.collector >= 1 }, { id: 'district', tier: 1, ok: s => Object.keys(s.districts).length >= 2 },
   { id: 'combo5', tier: 1, ok: s => s.maxCombo >= 5 }, { id: 'gold1', tier: 1, ok: s => s.goldLife >= 1 },
   { id: 'gear5', tier: 1, ok: s => gearLv(s) >= 5 }, { id: 'skill1', tier: 1, ok: s => nTree(s) >= 1 },
-  { id: 'wreck1', tier: 1, ok: s => s.wrecks >= 1 }, { id: 'sunOrange', tier: 1, ok: s => s.sent >= 3000 },
-  { id: 'sent1k', tier: 2, ok: s => s.sent >= 20000 }, { id: 'hire10', tier: 2, ok: s => s.team.robot >= 10 },
-  { id: 'operator', tier: 2, ok: s => s.team.launcher >= 1 }, { id: 'combo10', tier: 2, ok: s => s.maxCombo >= 10 },
-  { id: 'sunYellow', tier: 2, ok: s => s.sent >= 30000 }, { id: 'allDistricts', tier: 2, ok: s => s.team.crane >= 1 },
+  { id: 'wreck1', tier: 1, ok: s => s.wrecks >= 1 }, { id: 'sunOrange', tier: 1, ok: s => s.sent >= 150 },
+  { id: 'sent1k', tier: 2, ok: s => s.sent >= 1000 }, { id: 'hire10', tier: 2, ok: s => s.team.collector >= 10 },
+  { id: 'operator', tier: 2, ok: s => s.team.operator >= 1 }, { id: 'combo10', tier: 2, ok: s => s.maxCombo >= 10 },
+  { id: 'sunYellow', tier: 2, ok: s => s.sent >= 1500 }, { id: 'allDistricts', tier: 2, ok: s => Object.keys(s.districts).length >= 4 },
   { id: 'gold25', tier: 2, ok: s => s.goldLife >= 25 }, { id: 'lvl10', tier: 2, ok: s => s.level >= 10 },
-  { id: 'needle1', tier: 2, ok: s => s.needles >= 1 }, { id: 'halfway', tier: 2, ok: s => s.saved >= 1 || G.W.pollution(s) <= 0.5 },
+  { id: 'full25', tier: 2, ok: s => s.fullLaunches >= 25 }, { id: 'halfway', tier: 2, ok: s => s.saved >= 1 || G.W.pollution(s) <= 0.5 },
   { id: 'save1', tier: 3, outfit: 'goldcap', ok: s => s.saved >= 1 }, { id: 'save2', tier: 3, outfit: 'astro', ok: s => s.saved >= 2 },
   { id: 'jump1', tier: 3, outfit: 'cape', ok: s => s.jumps >= 1 }, { id: 'allMax', tier: 3, ok: s => G.W.allMax(s) },
   { id: 'treeFull', tier: 3, ok: s => nTree(s) >= G.TREE.length - 1 && G.TREE.every(n => n.type !== 'tech' || (s.tree[n.id] || 0) >= n.max) },
-  { id: 'team30', tier: 3, ok: s => s.team.robot >= 20 && s.team.dozer >= 8 && s.team.crane >= 4 }, { id: 'needle3', tier: 3, ok: s => s.needles >= 3 },
-  { id: 'marathon', tier: 3, outfit: 'headband', ok: s => s.walked >= 10000 }, { id: 'fridges', tier: 3, outfit: 'chef', ok: s => s.sent >= 1000000 },
+  { id: 'team30', tier: 3, ok: s => s.team.collector >= 30 }, { id: 'sent100k', tier: 3, ok: s => s.sent >= 100000 },
+  { id: 'marathon', tier: 3, outfit: 'headband', ok: s => s.walked >= 10000 }, { id: 'fridges', tier: 3, outfit: 'chef', ok: s => s.fridges >= 100 },
   { id: 'insomniac', tier: 3, outfit: 'nightcap', ok: s => s.insomniac },
 ];
+/* Tenues de l'éboueur (débloquées par certains succès) */
 G.OUTFITS = ['helmet', 'goldcap', 'astro', 'cape', 'headband', 'chef', 'nightcap'];
-
-/* Les objets rares cachés, un par planète (l'aiguille dans la botte de foin) */
-G.NEEDLES = ['guitar', 'vinyl', 'peace', 'camera', 'lamp'];
 
 /* ---------- Missions : une à la fois ---------- */
 G.MISSIONS = [
-  { id: 'suck', need: 40, val: s => Math.floor(s.picked), cash: 5 },
+  { id: 'pick', need: 8, val: s => s.picked, cash: 5 },
   { id: 'dump', need: 1, val: s => s.dumped, cash: 5 },
   { id: 'launch', need: 1, val: s => s.launches, cash: 10 },
-  { id: 'buy', need: 1, val: s => gearLv(s), cash: 15 },
-  { id: 'robot', need: 1, val: s => s.team.robot, cash: 30 },
-  { id: 'robot3', need: 3, val: s => s.team.robot, cash: 60 },
-  { id: 'launcher', need: 1, val: s => s.team.launcher, cash: 100 },
-  { id: 'skill', need: 1, val: s => G.TREE.filter(n => n.type === 'skill' && s.tree[n.id]).length, cash: 120 },
-  { id: 'dozer', need: 1, val: s => s.team.dozer, cash: 300 },
+  { id: 'buy', need: 1, val: s => G.GEAR.reduce((a, g) => a + s.gear[g.id], 0), cash: 10 },
+  { id: 'hire', need: 1, val: s => s.team.collector, cash: 20 },
+  { id: 'district', need: 2, val: s => Object.keys(s.districts).length, cash: 40 },
+  { id: 'hire3', need: 3, val: s => s.team.collector, cash: 40 },
+  { id: 'operator', need: 1, val: s => s.team.operator, cash: 80 },
+  { id: 'skill', need: 1, val: s => G.TREE.filter(n => n.type === 'skill' && s.tree[n.id]).length, cash: 80 },
+  { id: 'bins', need: 1, val: s => s.gear.bins, cash: 100 },
+  { id: 'hire6', need: 6, val: s => s.team.collector, cash: 150 },
+  { id: 'east', need: 3, val: s => Object.keys(s.districts).length, cash: 250 },
+  { id: 'half', need: 50, val: s => Math.round((1 - G.W.pollution(s)) * 100), cash: 400 },
   { id: 'gold', need: 1, val: s => s.goldLife, cash: 200 },
-  { id: 'half', need: 50, val: s => Math.round((1 - G.W.pollution(s)) * 100), cash: 600 },
-  { id: 'needle', need: 1, val: s => s.needles, cash: 0 },
-  { id: 'crane', need: 1, val: s => s.team.crane, cash: 1500 },
-  { id: 'save1', need: 1, val: s => s.saved, cash: 3000 },
+  { id: 'port', need: 4, val: s => Object.keys(s.districts).length, cash: 800 },
+  { id: 'save1', need: 1, val: s => s.saved, cash: 1000 },
   { id: 'ship', need: 1, val: s => (s.ship ? 1 : 0), cash: 0 },
-  { id: 'orbit', need: 10, val: s => s.orbitPicked, cash: 3000 },
-  { id: 'pilot', need: 1, val: s => s.team.pilot, cash: 3000 },
-  { id: 'save3', need: 3, val: s => s.saved, cash: 20000 },
+  { id: 'orbit', need: 10, val: s => s.orbitPicked, cash: 800 },
+  { id: 'pilot', need: 1, val: s => s.team.pilot, cash: 800 },
+  { id: 'save3', need: 3, val: s => s.saved, cash: 3000 },
   { id: 'jump', need: 1, val: s => s.jumps, cash: 0 },
 ];

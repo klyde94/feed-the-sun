@@ -1,2 +1,86 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../"><title>Feed the Sun</title></head><body><a href="../">Feed the Sun</a></body></html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feed the Sun (version ville)</title>
+<meta name="theme-color" content="#05060b">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Martian+Mono:wght@400;500;700&family=Michroma&display=swap">
+<link rel="stylesheet" href="style.css?v=3.3">
+<meta name="description" content="Feed the Sun : nettoie une ville polluée, embauche une équipe, envoie les déchets brûler dans le soleil. Jeu gratuit, en français et en anglais.">
+</head>
+<body>
+<div class="game" id="app">
+  <section class="stage" id="stage">
+    <canvas id="scene" aria-label="Scene"></canvas>
+
+    <div class="hud hud-left">
+      <div class="credits"><span id="money">0</span><span class="unit">$</span></div>
+      <div class="lvl" id="lvlRow" hidden><span id="lvlTxt">Niveau 1</span><span class="pts" id="ptsTxt"></span></div>
+      <div class="bar xp" id="xpRow"><div class="bar-fill" id="xpBar"></div></div>
+      <div class="mission" id="mission">
+        <div class="mission-top"><span data-i18n="missionLabel">Mission</span><span id="missionReward"></span></div>
+        <div class="mission-text" id="missionText"></div>
+        <div class="bar"><div class="bar-fill" id="missionBar"></div></div>
+      </div>
+    </div>
+
+    <div class="hud hud-right">
+      <div class="planet-name" id="planetName">Ordura</div>
+      <div class="poll"><span data-i18n="pollution">Pollution</span><span id="pollTxt">100 %</span></div>
+      <div class="bar poll-bar"><div class="bar-fill" id="pollBar"></div></div>
+    </div>
+
+    <div class="view-seg seg" id="viewSeg" hidden>
+      <button type="button" class="seg-btn" id="viewGround" data-i18n="ground">Ville</button>
+      <button type="button" class="seg-btn" id="viewOrbit" data-i18n="orbit">Orbite</button>
+    </div>
+    <div class="boost" id="boost" hidden></div>
+    <div class="hint" id="hint" hidden></div>
+
+    <nav class="dock" aria-label="Menu">
+      <button type="button" class="dock-btn" data-open="shop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span data-i18n="tabShop">Améliorer</span><i class="dot" id="dot-shop" hidden></i></button>
+      <button type="button" class="dock-btn" data-open="tree"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7v5M12 12l-7 5M12 12l7 5"/></svg><span data-i18n="tabTree">Arbre</span><i class="dot" id="dot-tree" hidden></i></button>
+      <button type="button" class="dock-btn" data-open="opt"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span data-i18n="tabOpt">Réglages</span></button>
+    </nav>
+
+    <button class="fire" id="launchBtn" type="button"><span data-i18n="launch">Lancer</span><kbd data-i18n="launchKey">Entrée</kbd></button>
+
+    <div class="banner" id="banner" hidden>
+      <div class="banner-title" id="bannerTitle"></div>
+      <div class="banner-text" id="bannerText"></div>
+      <button class="btn btn-sun" id="travelBtn" type="button"></button>
+    </div>
+
+    <section class="sheet" id="sheet" hidden aria-labelledby="sheetTitle">
+      <div class="sheet-head"><div class="sheet-grip"></div><h2 id="sheetTitle"></h2><button type="button" class="sheet-close" id="sheetClose" aria-label="Fermer">×</button></div>
+      <div class="sheet-body" id="sheetBody"></div>
+    </section>
+  </section>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<script src="data.js?v=3.3"></script>
+<script src="i18n.js?v=3.3"></script>
+<script src="city.js?v=3.3"></script>
+<script src="world.js?v=3.3"></script>
+<script src="render.js?v=3.3"></script>
+<script src="orbit.js?v=3.3"></script>
+<script src="panels.js?v=3.3"></script>
+<script src="ui.js?v=3.3"></script>
+</body>
+</html>

@@ -26,27 +26,36 @@
   /* ---------- Améliorer ---------- */
   function buildShop(box, ups, s) {
     const { T, fmt, fmtNum, modal, roman } = U();
-    const num = v => (Number.isInteger(v) ? fmt(v) : fmtNum(v));
+    const num = v => (Number.isInteger(v) ? String(v) : fmtNum(v));
     const gearRow = g => row(box, ups, {
       name: T('gear.' + g.id), onBuy: () => Wd.buyGear(s, g.id),
       view: () => { const l = s.gear[g.id], u = T('gear.' + g.id + '.u'); return { eff: u.replace('{v}', num(g.eff(l)) + (l < g.max ? ' → ' + num(g.eff(l + 1)) : '')), max: l >= g.max, can: Wd.canGear(s, g.id), cost: fmt(Wd.gearCost(s, g.id)) + ' $' }; },
     });
     const hireRow = h => row(box, ups, {
       name: T('hire.' + h.id), desc: T('hire.' + h.id + '.d'), big: true, onBuy: () => Wd.hire(s, h.id),
-      view: () => { const n = s.team[h.id]; if (!Wd.hireUnlocked(s, h.id)) return { eff: T('needMore', { n: h.need, name: T('hire.' + h.after) }), locked: true, cost: '🔒' }; return { eff: h.max > 1 ? T('hired', { n, m: h.max }) : (n ? T('hiredOne') : ''), max: n >= h.max, can: Wd.canHire(s, h.id), cost: fmt(Wd.hireCost(s, h.id)) + ' $' }; },
+      view: () => { const n = s.team[h.id]; return { eff: h.max > 1 ? T('hired', { n, m: h.max }) + (n ? ' · ' + T('avgLvl', { n: s.crew[h.zone].lvl }) : '') : (n ? T('hiredOne') : ''), max: n >= h.max, can: Wd.canHire(s, h.id), cost: fmt(Wd.hireCost(s, h.id)) + ' $' }; },
     });
     const sec = id => G.GEAR.filter(g => g.sec === id).forEach(gearRow);
-    const hire = id => hireRow(G.HIRES.find(h => h.id === id));
     head(box, T('me')); sec('me');
-    head(box, T('van')); sec('van'); if (s.launches >= 1) hire('launcher');
+    head(box, T('depot')); sec('depot');
     if (s.launches >= 1) {
-      head(box, T('machines'), T('machinesNote'));
-      hire('robot'); hire('dozer'); hire('crane');
-      if (s.team.robot >= 1) sec('machines');
+      head(box, T('city'), T('cityNote'));
+      ['north', 'east', 'port'].forEach(id => row(box, ups, {
+        name: T('district.' + id), desc: T('district.' + id + '.d'), big: true, onBuy: () => Wd.openDistrict(s, id),
+        view: () => ({ eff: s.districts[id] ? T('opened') : '', max: !!s.districts[id], can: Wd.canDistrict(s, id), cost: fmt(Wd.districtCost(s, id)) + ' $' }),
+      }));
+      sec('city');
+      head(box, T('crew'));
+      hireRow(G.HIRES[0]);
+      if (s.team.collector >= 1) hireRow(G.HIRES[1]);
+      if (s.team.collector >= 3) G.TEAM_UPS.forEach(u => row(box, ups, {
+        name: T('team.' + u.id), onBuy: () => Wd.buyTup(s, u.id),
+        view: () => { const l = s.teamUps[u.id], t = T('team.' + u.id + '.u'); return { eff: t.replace('{v}', num(u.eff(l)) + (l < u.max ? ' → ' + num(u.eff(l + 1)) : '')), max: l >= u.max, can: Wd.canTup(s, u.id), cost: fmt(Wd.tupCost(s, u.id)) + ' $' }; },
+      }));
     }
     head(box, T('myShip'), s.ship ? null : T('shipLocked'));
     if (!s.ship) row(box, ups, { name: T('buyShip'), desc: T('shipDesc'), big: true, onBuy: () => Wd.buyShip(s), view: () => ({ locked: s.saved < 1, can: Wd.canShip(s), cost: s.saved < 1 ? T('afterSave') : fmt(Wd.shipCost(s)) + ' $' }) });
-    else { hire('pilot'); if (s.team.pilot >= 1) hire('gunner'); sec('ship'); }
+    else { hireRow(G.HIRES[2]); if (s.team.pilot >= 1) hireRow(G.HIRES[3]); sec('ship'); }
     if (s.saved >= 1) {
       head(box, T('jumpTitle'), T('jumpDesc'));
       if (Wd.canJump(s)) {
@@ -135,7 +144,7 @@
     G.OUTFITS.forEach(id => {
       const own = !!s.outfits[id], c = el('button', 'outfit' + (s.outfit === id ? ' is-on' : '') + (own ? '' : ' is-locked')); c.type = 'button'; c.disabled = !own;
       const cv = el('canvas', 'outfit-cv'); cv.width = 120; cv.height = 140;
-      const g2 = cv.getContext('2d'); G.R.drawPerson(g2, 60, 132, 8.6, 1, 0, own ? '#ff8a2a' : '#555b6b', 0.3, 0, id);
+      const g2 = cv.getContext('2d'); G.R.drawPerson(g2, 60, 130, 9.5, 1, 0, own ? '#ff8a2a' : '#555b6b', 0.3, 0, id);
       c.append(cv, el('span', 'outfit-name', T('outfit.' + id)), el('span', 'outfit-state', s.outfit === id ? T('worn') : own ? T('wear') : T('lockedOutfit')));
       c.onclick = () => { if (Wd.setOutfit(s, id)) { U().sfx('buy'); P.render(true); } };
       wg.append(c);
@@ -160,7 +169,7 @@
   const BUILD = { shop: buildShop, tree: buildTree, opt: buildOptions };
   function signature(tab, s) {
     const base = U().lang() + '|';
-    if (tab === 'shop') return base + [s.ship, s.jumps, s.launches >= 1, s.team.robot >= 1, s.saved, Wd.canJump(s), s.team.pilot >= 1].join();
+    if (tab === 'shop') return base + [s.ship, s.jumps, s.launches >= 1, s.team.collector >= 1, s.team.collector >= 3, s.saved, Wd.canJump(s), s.team.pilot >= 1].join();
     if (tab === 'tree') return base + 'tree';
     return base + s.settings.sound + U().canInstall() + Wd.achCount(s) + s.outfit + Object.keys(s.outfits).length;
   }
@@ -175,7 +184,7 @@
     (P.up[tab] || []).forEach(f => f());
   };
   P.dots = s => ({
-    shop: G.GEAR.some(g => Wd.canGear(s, g.id)) || G.HIRES.some(h => Wd.canHire(s, h.id) && (h.id !== 'launcher' || s.launches >= 1)) || Wd.canShip(s),
+    shop: G.GEAR.some(g => Wd.canGear(s, g.id)) || G.HIRES.some(h => Wd.canHire(s, h.id) && (h.id !== 'operator' || s.team.collector)) || ['north', 'east', 'port'].some(id => s.launches >= 1 && Wd.canDistrict(s, id)) || Wd.canShip(s),
     tree: G.TREE.some(n => Wd.nodeState(s, n) === 'can'),
   });
 })();
